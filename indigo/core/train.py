@@ -68,7 +68,7 @@ def train_faster_rcnn_dataset(tfrecord_folder,
                       tf.reduce_sum(token_indicators[:, 1:]))
 
         # monitor training by printing the loss
-        if iteration % 10 == 0:
+        if iteration % 1 == 0:
             print('Iteration: {} Loss: {}'.format(iteration,
                                                   total_loss))
 
