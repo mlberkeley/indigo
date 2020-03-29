@@ -108,7 +108,8 @@ class Attention(tf.keras.layers.Layer):
             queries, keys, transpose_b=True) / size
 
         # apply a causal mask to the attention weights
-        mask = tf.expand_dims(inputs.values_mask, 1)
+        mask = tf.tile(inputs.values_mask, [self.heads, 1])
+        mask = tf.expand_dims(mask, 1)
         if self.causal:
             mask = tf.logical_and(mask, causal_mask(scores))
 
