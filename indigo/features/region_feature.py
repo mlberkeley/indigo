@@ -31,7 +31,7 @@ class RegionFeature(tf.keras.layers.Layer):
         self.word_embedding = tf.keras.layers.Embedding(
             num_embeddings, hidden_size, **kwargs)
         self.detection_embedding = tf.keras.layers.Embedding(
-            num_embeddings, hidden_size, **kwargs)
+            1024, hidden_size, **kwargs)
         self.dense = tf.keras.layers.Dense(
             hidden_size, **kwargs)
 
@@ -57,7 +57,7 @@ class RegionFeature(tf.keras.layers.Layer):
             inputs.values.boxes, y], 2), **kwargs)
 
         return TransformerInput(
-            queries=self.word_embedding(inputs.words, **kwargs),
+            queries=self.word_embedding(inputs.queries, **kwargs),
             values=y,
             queries_mask=inputs.queries_mask,
             values_mask=inputs.values_mask)

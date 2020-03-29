@@ -56,7 +56,7 @@ def load_parts_of_speech():
         a vocabulary object for mapping between words and
         ids in a tensorflow static graph"""
 
-    from nsds.data.caption import Vocabulary
+    from indigo.process.caption import Vocabulary
     return Vocabulary(
         parts_of_speech, unknown_word="<unk>", unknown_id=1)
 

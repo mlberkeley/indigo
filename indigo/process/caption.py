@@ -208,9 +208,9 @@ def process_captions(out_feature_folder,
 
             # convert string names to integers
             words_ids = np.concatenate(
-                [[2], vocab.words_to_ids(words_i), [3]], 0)
+                [[2], vocab.words_to_ids(tf.constant(words_i)), [3]], 0)
             tag_ids = np.concatenate(
-                [[2], parts_of_speech.words_to_ids(tag_i), [3]], 0)
+                [[2], parts_of_speech.words_to_ids(tf.constant(tag_i)), [3]], 0)
 
             # add the sample to the dataset
             samples.append(Sentence(words_ids, tag_ids))
