@@ -31,7 +31,7 @@ class RegionFeature(tf.keras.layers.Layer):
         self.word_embedding = tf.keras.layers.Embedding(
             num_embeddings, hidden_size, **kwargs)
         self.detection_embedding = tf.keras.layers.Embedding(
-            1024, hidden_size, **kwargs)
+            91, hidden_size, **kwargs)
         self.dense = tf.keras.layers.Dense(
             hidden_size, **kwargs)
 
