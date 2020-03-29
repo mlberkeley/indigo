@@ -36,7 +36,7 @@ def train_faster_rcnn_dataset(tfrecord_folder,
 
     # create a training pipeline
     dataset = faster_rcnn_dataset(tfrecord_folder, batch_size)
-    optim = tf.keras.optimizers.Adam()
+    optim = tf.keras.optimizers.Adam(learning_rate=0.0001)
 
     def loss_function(iteration, batch):
 
