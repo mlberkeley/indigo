@@ -1,4 +1,4 @@
-from indigo.process.image import process_images
+from indigo.process.images import process_images
 import argparse
 
 

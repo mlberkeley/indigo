@@ -1,25 +1,25 @@
+from indigo.process.rcnn_features import RCNNFeatures
 from torchvision.datasets.folder import default_loader
 from torchvision.models.detection.roi_heads import maskrcnn_inference
 from torchvision.models.detection.roi_heads import keypointrcnn_inference
 from torch.jit.annotations import Optional, List, Dict, Tuple
 from torchvision.ops import boxes as box_ops
-from collections import namedtuple
+
 from collections import OrderedDict
 from multiprocessing import Process
 from multiprocessing import set_start_method
+
 import pickle as pkl
 import os
 import tree
+
 import tensorflow as tf
 import torchvision
 import torch.nn.functional as F
 import torch
+
 import types
 import math
-
-
-Features = namedtuple("Features", [
-    "global_features", "boxes_features", "boxes", "labels", "scores"])
 
 
 def get_faster_rcnn():
@@ -349,7 +349,7 @@ def process_images_backend(gpu_id,
                     image[i].shape[1]]]).cuda()
 
                 # add all features to storage
-                samples = Features(
+                samples = RCNNFeatures(
                     global_features=global_features.cpu().detach().numpy(),
                     boxes_features=data['boxes_features'].cpu().detach().numpy(),
                     boxes=boxes.cpu().detach().numpy(),

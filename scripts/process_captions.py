@@ -1,4 +1,4 @@
-from indigo.process.caption import process_captions
+from indigo.process.captions import process_captions
 import argparse
 
 

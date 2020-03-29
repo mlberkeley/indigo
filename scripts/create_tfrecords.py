@@ -1,4 +1,4 @@
-from indigo.data.tfrecord import create_tfrecord
+from indigo.data.tfrecords import create_tfrecord
 import argparse
 
 

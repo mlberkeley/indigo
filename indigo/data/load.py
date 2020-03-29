@@ -1,4 +1,4 @@
-from indigo.process.image import Features
+from indigo.process.rcnn_features import RCNNFeatures
 import tensorflow as tf
 import os
 import pickle as pkl
