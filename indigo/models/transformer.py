@@ -55,14 +55,25 @@ class Transformer(tf.keras.Sequential):
             specifies the class to use for the final layer in the transformer
             defaults to Logits if not specified"""
 
+        # TODO: the keras sequential does not technically yet
+        #  support nested inputs but it should
         layers = []
-        if first_layer == 'word':
-            layers.extend([WordFeature(num_embeddings, **kwargs)])
-        if first_layer == 'image':
-            layers.extend([ImageFeature(hidden_size // 2, hidden_size, **kwargs)])
-        if first_layer == 'region':
-            layers.extend([RegionFeature(iterations=20)])
 
+        # the first layer in the transformer depends on the data modality
+        if first_layer == 'word':
+            layers.extend([WordFeature(num_embeddings,
+                                       hidden_size,
+                                       **kwargs)])
+        if first_layer == 'image':
+            layers.extend([ImageFeature(num_embeddings,
+                                        hidden_size,
+                                        **kwargs)])
+        if first_layer == 'region':
+            layers.extend([RegionFeature(num_embeddings,
+                                         hidden_size,
+                                         **kwargs)])
+
+        # the encoder processes values and the decoder processes queries
         layers.extend([EncoderLayer(hidden_size,
                                     hidden_size // 2,
                                     heads,
@@ -78,15 +89,16 @@ class Transformer(tf.keras.Sequential):
                                     causal=causal,
                                     **kwargs) for _ in range(num_layers)])
 
+        # the final layer in the transformer depends on the model purpose
         if final_layer == 'logits':
             layers.extend([Logits(num_embeddings, **kwargs)])
         if final_layer == 'pointer' or final_layer == 'sinkhorn':
-            layers.extend([PointerLayer(hidden_size // 2, hidden_size, **kwargs)])
+            layers.extend([PointerLayer(hidden_size // 2,
+                                        hidden_size,
+                                        **kwargs)])
         if final_layer == 'sinkhorn':
             layers.extend([Sinkhorn(iterations=20)])
 
-        # TODO: the keras sequential does not technically yet
-        #  support nested inputs but it should
         super(Transformer, self).__init__(layers)
 
         # these parameters need to be stored so that
