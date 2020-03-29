@@ -1,4 +1,4 @@
-from indigo.nn.base import Block
+from indigo.nn.base.block import Block
 from indigo.nn.ops.attention import Attention
 from indigo.input import AttentionInput
 from indigo.input import TransformerInput

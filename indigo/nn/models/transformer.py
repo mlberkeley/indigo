@@ -5,7 +5,7 @@ from indigo.nn.features.image_feature import ImageFeature
 from indigo.nn.features.region_feature import RegionFeature
 from indigo.nn.base.logits import Logits
 from indigo.nn.layers.pointer_layer import PointerLayer
-from indigo.nn.ops import Sinkhorn
+from indigo.nn.ops.sinkhorn import Sinkhorn
 import tensorflow as tf
 
 
