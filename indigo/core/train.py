@@ -50,9 +50,6 @@ def train_faster_rcnn_dataset(tfrecord_folder,
         words = batch["words"]
         token_indicators = batch["token_indicators"]
 
-        print(image_indicators.shape)
-        print(token_indicators.shape)
-
         model_features = TransformerInput(
             queries=words[:, :-1],
             values=RegionFeatureInput(features=boxes_features,
@@ -71,7 +68,7 @@ def train_faster_rcnn_dataset(tfrecord_folder,
                       tf.reduce_sum(token_indicators[:, 1:]))
 
         # monitor training by printing the loss
-        if iteration % 100 == 0:
+        if iteration % 10 == 0:
             print('Iteration: {} Loss: {}'.format(iteration,
                                                   total_loss))
 
