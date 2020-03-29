@@ -1,6 +1,8 @@
 from indigo.layers.encoder_layer import EncoderLayer
 from indigo.layers.decoder_layer import DecoderLayer
 from indigo.features.word_feature import WordFeature
+from indigo.features.image_feature import ImageFeature
+from indigo.features.region_feature import RegionFeature
 from indigo.base.logits import Logits
 from indigo.layers.pointer_layer import PointerLayer
 from indigo.ops.sinkhorn import Sinkhorn
@@ -17,8 +19,8 @@ class Transformer(tf.keras.Sequential):
                  queries_dropout=0.,
                  values_dropout=0.,
                  causal=True,
-                 first_layer=WordFeature,
-                 final_layer=Logits,
+                 first_layer='word',
+                 final_layer='logits',
                  **kwargs):
         """Creates a Transformer Keras model for processing sequences
         and uses the tf.keras.Sequential as backend
@@ -53,40 +55,36 @@ class Transformer(tf.keras.Sequential):
             specifies the class to use for the final layer in the transformer
             defaults to Logits if not specified"""
 
-        # creates an embeddings layer
-        # process queries (language) and values (image)
-        layers = [first_layer(
-            num_embeddings, hidden_size, **kwargs)]
+        layers = []
+        if first_layer == 'word':
+            layers.extend([WordFeature(num_embeddings, **kwargs)])
+        if first_layer == 'image':
+            layers.extend([ImageFeature(hidden_size // 2, hidden_size, **kwargs)])
+        if first_layer == 'region':
+            layers.extend([RegionFeature(iterations=20)])
 
-        # the encoder processes the 'values' tensor
-        layers.extend([EncoderLayer(
-            hidden_size,
-            hidden_size // 2,
-            heads,
-            queries_dropout=queries_dropout,
-            values_dropout=values_dropout,
-            causal=False,
-            **kwargs) for _ in range(num_layers)])
+        layers.extend([EncoderLayer(hidden_size,
+                                    hidden_size // 2,
+                                    heads,
+                                    queries_dropout=queries_dropout,
+                                    values_dropout=values_dropout,
+                                    causal=False,
+                                    **kwargs) for _ in range(num_layers)])
+        layers.extend([DecoderLayer(hidden_size,
+                                    hidden_size // 2,
+                                    heads,
+                                    queries_dropout=queries_dropout,
+                                    values_dropout=values_dropout,
+                                    causal=causal,
+                                    **kwargs) for _ in range(num_layers)])
 
-        # the decoder processes the 'queries' and 'values' tensor
-        layers.extend([DecoderLayer(
-            hidden_size,
-            hidden_size // 2,
-            heads,
-            queries_dropout=queries_dropout,
-            values_dropout=values_dropout,
-            causal=causal,
-            **kwargs) for _ in range(num_layers)])
-
-        if final_layer == Logits:
+        if final_layer == 'logits':
             layers.extend([Logits(num_embeddings, **kwargs)])
-        if final_layer == PointerLayer or final_layer == Sinkhorn:
+        if final_layer == 'pointer' or final_layer == 'sinkhorn':
             layers.extend([PointerLayer(hidden_size // 2, hidden_size, **kwargs)])
-        if final_layer == Sinkhorn:
+        if final_layer == 'sinkhorn':
             layers.extend([Sinkhorn(iterations=20)])
 
-        # the sequential provides a common interface
-        # for forward propagation
         # TODO: the keras sequential does not technically yet
         #  support nested inputs but it should
         super(Transformer, self).__init__(layers)
