@@ -1,7 +1,5 @@
 from indigo.core.train import train_faster_rcnn_dataset
 from indigo.models.transformer import Transformer
-from indigo.base.logits import Logits
-from indigo.features.region_feature import RegionFeature
 from indigo.process.caption import Vocabulary
 import tensorflow as tf
 import argparse
@@ -31,16 +29,15 @@ if __name__ == "__main__":
                            unknown_word="<unk>",
                            unknown_id=1)
 
-    model = Transformer(
-        vocab.size(),
-        args.embedding_size,
-        4,
-        args.num_layers,
-        queries_dropout=0.,
-        values_dropout=0.,
-        causal=True,
-        first_layer='region',
-        final_layer='logits')
+    model = Transformer(vocab.size(),
+                        args.embedding_size,
+                        4,
+                        args.num_layers,
+                        queries_dropout=0.,
+                        values_dropout=0.,
+                        causal=True,
+                        first_layer='region',
+                        final_layer='logits')
 
     train_faster_rcnn_dataset(args.tfrecord_folder,
                               args.batch_size,
