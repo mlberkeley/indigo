@@ -1,11 +1,11 @@
-from indigo.layers.encoder_layer import EncoderLayer
-from indigo.layers.decoder_layer import DecoderLayer
-from indigo.features.word_feature import WordFeature
-from indigo.features.image_feature import ImageFeature
-from indigo.features.region_feature import RegionFeature
-from indigo.base.logits import Logits
-from indigo.layers.pointer_layer import PointerLayer
-from indigo.ops.sinkhorn import Sinkhorn
+from indigo.nn.layers.encoder_layer import EncoderLayer
+from indigo.nn.layers.decoder_layer import DecoderLayer
+from indigo.nn.features.word_feature import WordFeature
+from indigo.nn.features.image_feature import ImageFeature
+from indigo.nn.features.region_feature import RegionFeature
+from indigo.nn.base.logits import Logits
+from indigo.nn.layers.pointer_layer import PointerLayer
+from indigo.nn.ops import Sinkhorn
 import tensorflow as tf
 
 

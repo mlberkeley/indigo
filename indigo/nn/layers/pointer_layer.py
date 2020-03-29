@@ -1,4 +1,4 @@
-from indigo.base.block import Block
+from indigo.nn.base import Block
 import tensorflow as tf
 
 

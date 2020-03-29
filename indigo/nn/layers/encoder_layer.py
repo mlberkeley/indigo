@@ -1,11 +1,11 @@
-from indigo.base.block import Block
-from indigo.ops.attention import Attention
+from indigo.nn.base import Block
+from indigo.nn.ops.attention import Attention
 from indigo.input import AttentionInput
 from indigo.input import TransformerInput
 import tensorflow as tf
 
 
-class DecoderLayer(tf.keras.layers.Layer):
+class EncoderLayer(tf.keras.layers.Layer):
 
     def __init__(self,
                  input_size,
@@ -15,8 +15,8 @@ class DecoderLayer(tf.keras.layers.Layer):
                  values_dropout=0.,
                  causal=True,
                  **kwargs):
-        """Creates a Transformer decoder layer by applying a
-        multi head attention layer
+        """Creates a Transformer encoder layer by applying a
+        multi head self attention layer
 
         Arguments:
 
@@ -38,10 +38,10 @@ class DecoderLayer(tf.keras.layers.Layer):
         causal: bool
             specifies is the transformer should decoding using
             a causal mask to preserve the auto regressive property"""
-        super(DecoderLayer, self).__init__()
+        super(EncoderLayer, self).__init__()
 
         # the core attention and processing layers
-        self.attention0 = Attention(
+        self.attention = Attention(
             heads,
             queries_dropout=queries_dropout,
             values_dropout=values_dropout,
@@ -50,22 +50,6 @@ class DecoderLayer(tf.keras.layers.Layer):
                             hidden_size * heads * 3,
                             **kwargs)
         self.block1 = Block(input_size // 2,
-                            input_size,
-                            **kwargs)
-
-        # the core attention and processing layers
-        self.attention1 = Attention(
-            heads,
-            queries_dropout=queries_dropout,
-            values_dropout=values_dropout,
-            causal=False)
-        self.block2 = Block(hidden_size * heads // 2,
-                            hidden_size * heads,
-                            **kwargs)
-        self.block3 = Block(hidden_size * heads // 2,
-                            hidden_size * heads * 2,
-                            **kwargs)
-        self.block4 = Block(input_size // 2,
                             input_size,
                             **kwargs)
 
@@ -95,7 +79,7 @@ class DecoderLayer(tf.keras.layers.Layer):
             the result of applying a multi head attention mechanism
             same shape as inputs"""
 
-        activations = self.block0(inputs.queries, **kwargs)
+        activations = self.block0(inputs.values, **kwargs)
         queries, keys, values = tf.split(
             activations, 3, axis=2)
 
@@ -103,35 +87,15 @@ class DecoderLayer(tf.keras.layers.Layer):
             queries=queries,
             keys=keys,
             values=values,
-            queries_mask=inputs.queries_mask,
-            values_mask=inputs.queries_mask)
+            queries_mask=inputs.values_mask,
+            values_mask=inputs.values_mask)
 
-        y = self.attention0(attention_input, **kwargs)
+        y = self.attention(attention_input, **kwargs)
         y = self.block1(y, **kwargs)
 
-        inputs = TransformerInput(
-            queries=inputs.queries + y,
-            values=inputs.values,
-            queries_mask=inputs.queries_mask,
-            values_mask=inputs.values_mask)
-
-        queries = self.block2(inputs.queries, **kwargs)
-        keys, values = tf.split(
-            self.block3(inputs.values, **kwargs), 2, axis=2)
-
-        attention_input = AttentionInput(
-            queries=queries,
-            keys=keys,
-            values=values,
-            queries_mask=inputs.queries_mask,
-            values_mask=inputs.values_mask)
-
-        y = self.attention1(attention_input, **kwargs)
-        y = self.block4(y, **kwargs)
-
         return TransformerInput(
-            queries=inputs.queries + y,
-            values=inputs.values,
+            queries=inputs.queries,
+            values=inputs.values + y,
             queries_mask=inputs.queries_mask,
             values_mask=inputs.values_mask)
 
@@ -154,6 +118,6 @@ class DecoderLayer(tf.keras.layers.Layer):
                       causal=self.causal,
                       ** self.kwargs)
 
-        base_config = super(DecoderLayer, self).get_config()
+        base_config = super(EncoderLayer, self).get_config()
         return dict(list(base_config.items()) +
                     list(config.items()))

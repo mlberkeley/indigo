@@ -1,5 +1,5 @@
 from indigo.core.train import train_faster_rcnn_dataset
-from indigo.models.transformer import Transformer
+from indigo.nn.models.transformer import Transformer
 from indigo.process.captions import Vocabulary
 import tensorflow as tf
 import argparse
