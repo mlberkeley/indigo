@@ -93,9 +93,7 @@ class Transformer(tf.keras.Sequential):
         if final_layer == 'logits':
             layers.extend([Logits(num_embeddings, **kwargs)])
         if final_layer == 'pointer' or final_layer == 'sinkhorn':
-            layers.extend([PointerLayer(hidden_size // 2,
-                                        hidden_size,
-                                        **kwargs)])
+            layers.extend([PointerLayer(hidden_size // 2, hidden_size, **kwargs)])
         if final_layer == 'sinkhorn':
             layers.extend([Sinkhorn(iterations=20)])
 

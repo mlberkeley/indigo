@@ -50,6 +50,9 @@ def train_faster_rcnn_dataset(tfrecord_folder,
         words = batch["words"]
         token_indicators = batch["token_indicators"]
 
+        print(image_indicators.shape)
+        print(token_indicators.shape)
+
         model_features = TransformerInput(
             queries=words[:, :-1],
             values=RegionFeatureInput(features=boxes_features,
