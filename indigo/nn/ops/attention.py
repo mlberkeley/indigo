@@ -114,8 +114,9 @@ class Attention(tf.keras.layers.Layer):
             mask = tf.logical_and(mask, causal_mask(scores))
 
         # apply a boolean mask to the keys and values
+        null_mask = tf.logical_not(mask)
         scores = tf.math.softmax(
-            scores - 999999. * tf.cast(mask, tf.float32))
+            scores - 999999. * tf.cast(null_mask, tf.float32))
 
         # apply the attention weights to compute an output sequence
         outputs = tf.matmul(scores, values)
