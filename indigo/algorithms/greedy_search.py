@@ -37,7 +37,7 @@ def greedy_search(model_features,
     model_features = TransformerInput(
         queries=tf.fill([batch_size, 1], 2),
         values=model_features.values,
-        queries_mask=tf.ones([batch_size, 1], tf.float32),
+        queries_mask=tf.fill([batch_size, 1], True),
         values_mask=model_features.values_mask)
 
     # loop for a maximum of max_iterations decoding steps
@@ -52,8 +52,8 @@ def greedy_search(model_features,
         values, ids = tf.math.top_k(logits, k=1)
 
         # calculate the log probability for every candidate sentence
-        log_p = log_p + tf.where(
-            closed_beams, tf.zeros_like(values), values)
+        v = tf.squeeze(values, 1)
+        log_p = log_p + tf.where(closed_beams, tf.zeros_like(v), v)
 
         # prepare the decoded word ids
         ids = tf.squeeze(ids, 1)
@@ -71,7 +71,8 @@ def greedy_search(model_features,
         model_features = TransformerInput(
             queries=next_queries,
             values=model_features.values,
-            queries_mask=tf.ones(tf.shape(next_queries), tf.float32),
+            queries_mask=tf.fill(tf.shape(next_queries), True),
             values_mask=model_features.values_mask)
 
     return model_features.queries, log_p
+

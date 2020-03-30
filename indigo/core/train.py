@@ -1,7 +1,7 @@
 from indigo.data.load import faster_rcnn_dataset
 from indigo.input import TransformerInput
 from indigo.input import RegionFeatureInput
-from indigo.algorithms.beam_search import beam_search
+from indigo.algorithms.greedy_search import greedy_search
 import tensorflow as tf
 import os
 
@@ -69,9 +69,24 @@ def train_faster_rcnn_dataset(tfrecord_folder,
                       tf.reduce_sum(token_indicators[:, 1:]))
 
         # monitor training by printing the loss
-        if iteration % 1 == 0:
+        if iteration % 100 == 0:
             print('Iteration: {} Loss: {}'.format(iteration,
                                                   total_loss))
+
+            cap, log_p = greedy_search(model_features,
+                                       model,
+                                       max_iterations=20)
+
+            p = tf.math.exp(log_p)[0]
+
+            cap = tf.strings.reduce_join(
+                vocab.ids_to_words(cap), axis=1, separator=' ')[0]
+
+            out = tf.strings.reduce_join(
+                vocab.ids_to_words(words), axis=1, separator=' ')[0]
+
+            print("[p = {}] Prediction: {}\nGround Truth: {}\n".format(
+                p.numpy(), cap.numpy().decode('utf8'), out.numpy().decode('utf8')))
 
         return total_loss
 
@@ -93,35 +108,3 @@ def train_faster_rcnn_dataset(tfrecord_folder,
         # save once at the end of every epoch
         model.save_weights(model_ckpt, save_format='tf')
 
-    for batch in dataset:
-
-        # select all relevant image features
-        image_indicators = batch["image_indicators"]
-        boxes_features = batch["boxes_features"]
-        boxes = batch["boxes"]
-        detections = batch["labels"]
-
-        # select all relevant language features
-        words = batch["words"]
-        token_indicators = batch["token_indicators"]
-
-        model_features = TransformerInput(
-            queries=words[:, :-1],
-            values=RegionFeatureInput(features=boxes_features,
-                                      boxes=boxes,
-                                      detections=detections),
-            queries_mask=tf.greater(token_indicators[:, :-1], 0.),
-            values_mask=tf.greater(image_indicators, 0.))
-
-        out = beam_search(model_features,
-                          model,
-                          beam_size=8,
-                          max_iterations=20)[0]
-
-        out = tf.strings.reduce_join(
-            vocab.ids_to_words(out), axis=2, separator=' ')
-
-        nn = tf.strings.reduce_join(
-            vocab.ids_to_words(words), axis=1, separator=' ')
-
-        print(nn.numpy()[0])

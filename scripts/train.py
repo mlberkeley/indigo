@@ -15,7 +15,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--vocab_file', type=str, default='vocab.txt')
     parser.add_argument(
-        '--num_epochs', type=int, default=1000)
+        '--num_epochs', type=int, default=10)
     parser.add_argument(
         '--model_ckpt', type=str, default='ckpt/decoder')
     parser.add_argument(
