@@ -98,6 +98,8 @@ def train_faster_rcnn_dataset(tfrecord_folder,
     # training for a pre specified number of epochs
     iteration = 0
     for epoch in range(num_epoch):
+
+        # loop through the entire dataset precisely once
         for batch in dataset:
 
             optim.minimize(lambda: loss_function(iteration, batch),
@@ -107,4 +109,8 @@ def train_faster_rcnn_dataset(tfrecord_folder,
 
         # save once at the end of every epoch
         model.save_weights(model_ckpt, save_format='tf')
+
+        # anneal the model learning rate after an epoch
+        optim.lr.assign(optim.lr / tf.sqrt(
+            tf.constant(10., dtype=tf.float32)))
 
