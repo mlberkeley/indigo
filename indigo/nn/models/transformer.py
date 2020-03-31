@@ -5,7 +5,7 @@ from indigo.nn.features.image_feature import ImageFeature
 from indigo.nn.features.region_feature import RegionFeature
 from indigo.nn.base.logits import Logits
 from indigo.nn.layers.pointer import Pointer
-from indigo.nn.ops.sinkhorn import Sinkhorn
+from indigo.nn.layers.pointer_and_logits import PointerAndLogits
 import tensorflow as tf
 
 
@@ -19,6 +19,7 @@ class Transformer(tf.keras.Sequential):
                  queries_dropout=0.,
                  values_dropout=0.,
                  causal=True,
+                 logits_per_slot=2,
                  first_layer='word',
                  final_layer='logits',
                  **kwargs):
@@ -48,6 +49,9 @@ class Transformer(tf.keras.Sequential):
         causal: bool
             specifies is the transformer should decoding using
             a causal mask to preserve the auto regressive property
+        logits_per_slot: int
+            specifies the number of logits per element the pointer
+            network attends to; default is 2
         first_layer: class
             specifies the class to use for the first layer in the transformer
             defaults to WordFeature if not specified
@@ -91,11 +95,21 @@ class Transformer(tf.keras.Sequential):
 
         # the final layer in the transformer depends on the model purpose
         if final_layer == 'logits':
-            layers.extend([Logits(num_embeddings, **kwargs)])
-        if final_layer == 'pointer' or final_layer == 'sinkhorn':
-            layers.extend([Pointer(hidden_size // 2, hidden_size, **kwargs)])
-        if final_layer == 'sinkhorn':
-            layers.extend([Sinkhorn(iterations=20)])
+            layers.extend([Logits(num_embeddings,
+                                  **kwargs)])
+        if final_layer == 'pointer':
+            layers.extend([Pointer(hidden_size // 2,
+                                   hidden_size,
+                                   causal=causal,
+                                   logits_per_slot=logits_per_slot,
+                                   **kwargs)])
+        if final_layer == 'pointer_and_logits':
+            layers.extend([PointerAndLogits(hidden_size // 2,
+                                            hidden_size,
+                                            num_embeddings,
+                                            causal=causal,
+                                            logits_per_slot=logits_per_slot,
+                                            **kwargs)])
 
         super(Transformer, self).__init__(layers)
 
@@ -108,6 +122,7 @@ class Transformer(tf.keras.Sequential):
         self.queries_dropout = queries_dropout
         self.values_dropout = values_dropout
         self.causal = causal
+        self.logits_per_slot = logits_per_slot
         self.first_layer = first_layer
         self.final_layer = final_layer
         self.kwargs = kwargs
@@ -130,6 +145,7 @@ class Transformer(tf.keras.Sequential):
                       queries_dropout=self.queries_dropout,
                       values_dropout=self.values_dropout,
                       causal=self.causal,
+                      logits_per_slot=self.logits_per_slot,
                       first_layer=self.first_layer,
                       final_layer=self.final_layer,
                       ** self.kwargs)
