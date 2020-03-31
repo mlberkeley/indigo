@@ -69,6 +69,8 @@ class Pointer(tf.keras.layers.Layer):
             mask = tf.logical_and(mask, causal_mask(scores))
 
         # filter by removing logits for elements that are invalid
+        # mask must be repeated to correct the shape
+        mask = tf.repeat(mask, [1, 1, self.logits_per_slot])
         return tf.where(
             mask, scores, tf.fill(tf.shape(scores), -999999.))
 
