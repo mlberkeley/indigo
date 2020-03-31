@@ -8,7 +8,8 @@ class Pointer(tf.keras.layers.Layer):
     def __init__(self,
                  hidden_size,
                  output_size,
-                 causal=True):
+                 causal=True,
+                 logits_per_slot=2):
         """Creates a ops layer for sampling permutation matrices
         rather than soft max attention masks
 
@@ -22,14 +23,18 @@ class Pointer(tf.keras.layers.Layer):
             used by this layer
         causal: bool
             specifies is the transformer should decoding using
-            a causal mask to preserve the auto regressive property"""
+            a causal mask to preserve the auto regressive property
+        logits_per_slot: int
+            specifies the number of logits per element the pointer
+            network attends to; default is 2"""
         super(Pointer, self).__init__()
 
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.causal = causal
-        self.block = Block(hidden_size,
-                           output_size * 2)
+        self.logits_per_slot = logits_per_slot
+        self.block = Block(
+            hidden_size, output_size * (1 + logits_per_slot))
 
     def call(self, inputs, **kwargs):
         """Runs a forward pass on a pointer network that generates
@@ -47,8 +52,13 @@ class Pointer(tf.keras.layers.Layer):
             a permutation matrix in log space that has the same shape
             as the transformer attention weights"""
 
-        # map into a common latent space
-        q, k = tf.split(self.block(inputs.queries, **kwargs), 2, axis=2)
+        # map the sequence into a latent space
+        features = self.block(inputs.queries, **kwargs)
+        q = features[..., :self.output_size]
+
+        # reshape keys to have logits_per_slot more time steps
+        shape = tf.multiply(tf.shape(q), [1, self.logits_per_slot, 1])
+        k = tf.reshape(features[..., self.output_size:], shape)
         scores = tf.matmul(q, k, transpose_b=True)
 
         # prevent the permutation matrix from assigning mass to
@@ -75,7 +85,8 @@ class Pointer(tf.keras.layers.Layer):
         # these are all that is needed to rebuild this class
         config = dict(hidden_size=self.hidden_size,
                       output_size=self.output_size,
-                      causal=self.causal)
+                      causal=self.causal,
+                      logits_per_slot=self.logits_per_slot)
 
         base_config = super(Block, self).get_config()
         return dict(list(base_config.items()) +
