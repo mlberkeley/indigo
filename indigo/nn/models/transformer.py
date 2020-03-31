@@ -65,51 +65,33 @@ class Transformer(tf.keras.Sequential):
 
         # the first layer in the transformer depends on the data modality
         if first_layer == 'word':
-            layers.extend([WordFeature(num_embeddings,
-                                       hidden_size,
-                                       **kwargs)])
+            layers.extend([WordFeature(num_embeddings, hidden_size, **kwargs)])
         if first_layer == 'image':
-            layers.extend([ImageFeature(num_embeddings,
-                                        hidden_size,
-                                        **kwargs)])
+            layers.extend([ImageFeature(num_embeddings, hidden_size, **kwargs)])
         if first_layer == 'region':
-            layers.extend([RegionFeature(num_embeddings,
-                                         hidden_size,
-                                         **kwargs)])
+            layers.extend([RegionFeature(num_embeddings, hidden_size, **kwargs)])
 
         # the encoder processes values and the decoder processes queries
-        layers.extend([EncoderLayer(hidden_size,
-                                    hidden_size // 2,
-                                    heads,
-                                    queries_dropout=queries_dropout,
-                                    values_dropout=values_dropout,
-                                    causal=False,
-                                    **kwargs) for _ in range(num_layers)])
-        layers.extend([DecoderLayer(hidden_size,
-                                    hidden_size // 2,
-                                    heads,
-                                    queries_dropout=queries_dropout,
-                                    values_dropout=values_dropout,
-                                    causal=causal,
-                                    **kwargs) for _ in range(num_layers)])
+        layers.extend([EncoderLayer(
+            hidden_size, hidden_size // 2, heads,
+            queries_dropout=queries_dropout, values_dropout=values_dropout,
+            causal=False, **kwargs) for _ in range(num_layers)])
+        layers.extend([DecoderLayer(
+            hidden_size, hidden_size // 2, heads,
+            queries_dropout=queries_dropout, values_dropout=values_dropout,
+            causal=causal, **kwargs) for _ in range(num_layers)])
 
         # the final layer in the transformer depends on the model purpose
         if final_layer == 'logits':
-            layers.extend([Logits(num_embeddings,
-                                  **kwargs)])
+            layers.extend([Logits(num_embeddings, **kwargs)])
         if final_layer == 'pointer':
-            layers.extend([Pointer(hidden_size // 2,
-                                   hidden_size,
-                                   causal=causal,
-                                   logits_per_slot=logits_per_slot,
-                                   **kwargs)])
+            layers.extend([Pointer(
+                hidden_size // 2, hidden_size,
+                causal=causal, logits_per_slot=logits_per_slot, **kwargs)])
         if final_layer == 'pointer_and_logits':
-            layers.extend([PointerAndLogits(hidden_size // 2,
-                                            hidden_size,
-                                            num_embeddings,
-                                            causal=causal,
-                                            logits_per_slot=logits_per_slot,
-                                            **kwargs)])
+            layers.extend([PointerAndLogits(
+                hidden_size // 2, hidden_size, num_embeddings,
+                causal=causal, logits_per_slot=logits_per_slot, **kwargs)])
 
         super(Transformer, self).__init__(layers)
 
