@@ -4,7 +4,7 @@ from indigo.nn.features.word_feature import WordFeature
 from indigo.nn.features.image_feature import ImageFeature
 from indigo.nn.features.region_feature import RegionFeature
 from indigo.nn.base.logits import Logits
-from indigo.nn.layers.pointer_layer import PointerLayer
+from indigo.nn.layers.pointer import Pointer
 from indigo.nn.ops.sinkhorn import Sinkhorn
 import tensorflow as tf
 
@@ -93,7 +93,7 @@ class Transformer(tf.keras.Sequential):
         if final_layer == 'logits':
             layers.extend([Logits(num_embeddings, **kwargs)])
         if final_layer == 'pointer' or final_layer == 'sinkhorn':
-            layers.extend([PointerLayer(hidden_size // 2, hidden_size, **kwargs)])
+            layers.extend([Pointer(hidden_size // 2, hidden_size, **kwargs)])
         if final_layer == 'sinkhorn':
             layers.extend([Sinkhorn(iterations=20)])
 

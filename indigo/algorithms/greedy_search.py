@@ -75,4 +75,3 @@ def greedy_search(model_features,
             values_mask=model_features.values_mask)
 
     return model_features.queries, log_p
-

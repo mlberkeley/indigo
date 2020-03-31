@@ -1,12 +1,14 @@
 from indigo.nn.base.block import Block
+from indigo.nn.ops.attention import causal_mask
 import tensorflow as tf
 
 
-class PointerLayer(tf.keras.layers.Layer):
+class Pointer(tf.keras.layers.Layer):
 
     def __init__(self,
                  hidden_size,
-                 output_size):
+                 output_size,
+                 causal=True):
         """Creates a ops layer for sampling permutation matrices
         rather than soft max attention masks
 
@@ -17,11 +19,15 @@ class PointerLayer(tf.keras.layers.Layer):
             used by this layer
         output_size: int
             the number of output units used by the network blocks
-            used by this layer"""
-        super(PointerLayer, self).__init__()
+            used by this layer
+        causal: bool
+            specifies is the transformer should decoding using
+            a causal mask to preserve the auto regressive property"""
+        super(Pointer, self).__init__()
 
         self.hidden_size = hidden_size
         self.output_size = output_size
+        self.causal = causal
         self.block = Block(hidden_size,
                            output_size * 2)
 
@@ -49,6 +55,10 @@ class PointerLayer(tf.keras.layers.Layer):
         # out of bounds elements
         mask = tf.logical_and(tf.expand_dims(inputs.queries_mask, 2),
                               tf.expand_dims(inputs.queries_mask, 1))
+        if self.causal:
+            mask = tf.logical_and(mask, causal_mask(scores))
+
+        # filter by removing logits for elements that are invalid
         return tf.where(
             mask, scores, tf.fill(tf.shape(scores), -999999.))
 
@@ -64,7 +74,8 @@ class PointerLayer(tf.keras.layers.Layer):
 
         # these are all that is needed to rebuild this class
         config = dict(hidden_size=self.hidden_size,
-                      output_size=self.output_size)
+                      output_size=self.output_size,
+                      causal=self.causal)
 
         base_config = super(Block, self).get_config()
         return dict(list(base_config.items()) +
