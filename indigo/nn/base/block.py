@@ -69,7 +69,7 @@ class Block(tf.keras.Sequential):
         # these are all that is needed to rebuild this class
         config = dict(hidden_size=self.hidden_size,
                       output_size=self.output_size,
-                      activation=self.activationm
+                      activation=self.activation,
                       ** self.kwargs)
 
         base_config = super(Block, self).get_config()
