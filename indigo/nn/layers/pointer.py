@@ -30,13 +30,18 @@ class Pointer(tf.keras.layers.Layer):
             network attends to; default is 2"""
         super(Pointer, self).__init__()
 
+        # the core processing layers
+        self.block = Block(
+            hidden_size, output_size * (1 + logits_per_slot), **kwargs)
+
+        # these parameters need to be stored so that
+        # tf.keras.model.save_model works
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.causal = causal
         self.logits_per_slot = logits_per_slot
         self.kwargs = kwargs
-        self.block = Block(
-            hidden_size, output_size * (1 + logits_per_slot), **kwargs)
+
 
     def call(self, inputs, **kwargs):
         """Runs a forward pass on a pointer network that generates

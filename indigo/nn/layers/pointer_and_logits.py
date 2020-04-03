@@ -1,4 +1,5 @@
-from indigo.nn.layers.pointer import Pointer
+from indigo.nn.base.block import Block
+from indigo.nn.ops.attention import causal_mask
 from indigo.nn.base.logits import Logits
 import tensorflow as tf
 
@@ -34,12 +35,13 @@ class PointerAndLogits(tf.keras.layers.Layer):
             network attends to; default is 2"""
         super(PointerAndLogits, self).__init__()
 
+        # the core processing layers
         self.logits = Logits(logits_size, **kwargs)
-        self.pointer = Pointer(hidden_size,
-                               output_size,
-                               causal=True,
-                               logits_per_slot=2,
-                               **kwargs)
+        self.block = Block(hidden_size,
+                           output_size * (1 + logits_per_slot),
+                           **kwargs)
+        self.logits_embedding = tf.keras.layers.Embedding(
+            logits_size, output_size, **kwargs)
 
         # these parameters need to be stored so that
         # tf.keras.model.save_model works
@@ -62,15 +64,35 @@ class PointerAndLogits(tf.keras.layers.Layer):
 
         Returns:
 
-        pointer_logits: tf.Tensor
-            the logits of a pointer network used to select locations to
-            insert words in a transformer
         logits: tf.Tensor
             the logits of a transformer model used for word prediction
-            or during a search algorithm"""
+            or during a search algorithm
+        pointer_logits: tf.Tensor
+            the logits of a pointer network used to select locations to
+            insert words in a transformer"""
 
-        return self.pointer(
-            inputs, **kwargs), self.logits(inputs, **kwargs)
+        # map the sequence into a latent space
+        features = self.block(inputs.queries, **kwargs)
+        q = features[..., :self.output_size]
+        q = q + self.logits_embedding(inputs.target)
+
+        # reshape keys to have logits_per_slot more time steps
+        shape = tf.multiply(tf.shape(q), [1, self.logits_per_slot, 1])
+        k = tf.reshape(features[..., self.output_size:], shape)
+        scores = tf.matmul(q, k, transpose_b=True)
+
+        # prevent the permutation matrix from assigning mass to
+        # out of bounds elements
+        mask = tf.logical_and(tf.expand_dims(inputs.queries_mask, 2),
+                              tf.expand_dims(inputs.queries_mask, 1))
+        if self.causal:
+            mask = tf.logical_and(mask, causal_mask(scores))
+
+        # filter by removing logits for elements that are invalid
+        # mask must be repeated to correct the shape
+        mask = tf.repeat(mask, [1, 1, self.logits_per_slot])
+        return self.logits(inputs, **kwargs), tf.where(
+            mask, scores, tf.fill(tf.shape(scores), -999999.))
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

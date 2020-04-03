@@ -16,14 +16,14 @@ class Logits(tf.keras.layers.Layer):
             of a transformer model"""
         super(Logits, self).__init__()
 
+        # the core processing layers
+        self.dense = tf.keras.layers.Dense(
+            output_size, **kwargs)
+
         # these parameters need to be stored so that
         # tf.keras.model.save_model works
         self.output_size = output_size
         self.kwargs = kwargs
-
-        # the core processing layers
-        self.dense = tf.keras.layers.Dense(
-            output_size, **kwargs)
 
     def call(self, inputs, **kwargs):
         """Runs a forward pass on the logits of a transformer
