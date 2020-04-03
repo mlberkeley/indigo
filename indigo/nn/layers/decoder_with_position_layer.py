@@ -52,7 +52,7 @@ class DecoderWithPositionLayer(tf.keras.layers.Layer):
         self.block1 = Block(input_size // 2,
                             input_size,
                             **kwargs)
-        self.position_embedding = tf.keras.layers.Embedding(
+        self.pos_embedding = tf.keras.layers.Embedding(
             3, hidden_size * heads, **kwargs)
 
         # the core attention and processing layers
@@ -98,11 +98,7 @@ class DecoderWithPositionLayer(tf.keras.layers.Layer):
             same shape as inputs"""
 
         activations = self.block0(inputs.queries, **kwargs)
-        queries, keys, values = tf.split(
-            activations, 3, axis=2)
-        keys = keys + self.position_embedding(inputs.positions,
-                                              **kwargs)
-
+        queries, keys, values = tf.split(activations, 3, axis=2)
         attention_input = AttentionInput(
             queries=queries,
             keys=keys,
@@ -110,10 +106,17 @@ class DecoderWithPositionLayer(tf.keras.layers.Layer):
             queries_mask=inputs.queries_mask,
             values_mask=inputs.queries_mask)
 
+        # add a position-conditioned bias to the attention scores
+        # in log-space: https://arxiv.org/pdf/1902.01370.pdf
+        keys = tf.concat(tf.split(keys, self.heads, axis=2), axis=0)
+        pos = self.pos_embedding(inputs.positions, **kwargs)
+        pos = tf.concat(tf.split(pos, self.heads, axis=2), axis=0)
+        attention_input.bias = tf.matmul(
+            tf.expand_dims(keys, axis=2), pos, transpose_b=True)
+
         y = self.attention0(attention_input, **kwargs)
         y = self.block1(y, **kwargs)
         inputs.queries = inputs.queries + y
-
         queries = self.block2(inputs.queries, **kwargs)
         keys, values = tf.split(
             self.block3(inputs.values, **kwargs), 2, axis=2)
@@ -127,7 +130,6 @@ class DecoderWithPositionLayer(tf.keras.layers.Layer):
 
         y = self.attention1(attention_input, **kwargs)
         y = self.block4(y, **kwargs)
-
         inputs.queries = inputs.queries + y
         return inputs
 

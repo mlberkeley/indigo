@@ -104,7 +104,9 @@ class Attention(tf.keras.layers.Layer):
         # compute the multi head attention weights
         size = tf.math.sqrt(
             tf.cast(tf.shape(queries)[2], tf.float32))
-        scores = tf.matmul(
+        scores = inputs.bias if hasattr(inputs, 'bias') \
+                 and inputs.bias is not None else 0
+        scores = scores + tf.matmul(
             queries, keys, transpose_b=True) / size
 
         # apply a causal mask to the attention weights
