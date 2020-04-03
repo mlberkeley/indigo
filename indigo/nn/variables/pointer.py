@@ -66,7 +66,8 @@ class Pointer(Layer):
         # reshape keys to have logits_per_slot more time steps
         shape = tf.multiply(tf.shape(q), [1, self.logits_per_slot, 1])
         k = tf.reshape(features[..., self.output_size:], shape)
-        scores = tf.matmul(q, k, transpose_b=True)
+        size = tf.math.sqrt(tf.cast(tf.shape(q)[2], tf.float32))
+        scores = tf.matmul(q, k, transpose_b=True) / size
 
         # prevent the permutation matrix from assigning mass to
         # out of bounds elements
@@ -102,8 +103,8 @@ class Pointer(Layer):
             or a pointer network"""
 
         pointer = self.call(inputs, **kwargs)
-        absolute_pos = tf.reduce_sum(tf.nn.relu(inputs.positions), axis=2)
-        return 0.001 * tf.keras.losses.sparse_categorical_crossentropy(
+        absolute_pos = tf.reduce_sum(tf.nn.relu(inputs.positions), axis=1)
+        return tf.keras.losses.sparse_categorical_crossentropy(
             absolute_pos, pointer, from_logits=True), inputs
 
     def greedy_search(self,

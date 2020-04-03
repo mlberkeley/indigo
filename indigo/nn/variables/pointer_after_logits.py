@@ -72,7 +72,8 @@ class PointerAfterLogits(Pointer):
         # reshape keys to have logits_per_slot more time steps
         shape = tf.multiply(tf.shape(q), [1, self.logits_per_slot, 1])
         k = tf.reshape(features[..., self.output_size:], shape)
-        scores = tf.matmul(q, k, transpose_b=True)
+        size = tf.math.sqrt(tf.cast(tf.shape(q)[2], tf.float32))
+        scores = tf.matmul(q, k, transpose_b=True) / size
 
         # prevent the permutation matrix from assigning mass to
         # out of bounds elements
