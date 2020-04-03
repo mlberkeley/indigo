@@ -64,7 +64,7 @@ class Attention(tf.keras.layers.Layer):
             values_dropout)
 
         # these parameters need to be stored so that
-        # tf.keras.model.save_model works
+        # tf.layers.model.save_model works
         self.heads = heads
         self.queries_dropout_rate = queries_dropout
         self.values_dropout_rate = values_dropout
@@ -138,7 +138,7 @@ class Attention(tf.keras.layers.Layer):
 
         config: dict
             a dictionary that contains all parameters to the
-            keras base class and all class parameters"""
+            layers base class and all class parameters"""
 
         # these are all that is needed to rebuild this class
         config = dict(heads=self.heads,

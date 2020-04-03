@@ -1,15 +1,17 @@
 from indigo.nn.base.block import Block
-from indigo.nn.ops.attention import causal_mask
+from indigo.nn.base.attention import causal_mask
+from indigo.nn.variables.pointer import Pointer
 import tensorflow as tf
 
 
-class Pointer(tf.keras.layers.Layer):
+class PointerAfterLogits(Pointer):
 
     def __init__(self,
                  hidden_size,
                  output_size,
+                 logits_size,
                  causal=True,
-                 logits_per_slot=2,
+                 logits_per_slot=1,
                  **kwargs):
         """Creates a pointer network using the first operation
         in the self attention mechanism
@@ -22,30 +24,36 @@ class Pointer(tf.keras.layers.Layer):
         output_size: int
             the number of output units used by the network blocks
             used by this layer
+        logits_size: int
+            the number of units in the vector space of the logits
+            of a transformer model
         causal: bool
             specifies is the transformer should decoding using
             a causal mask to preserve the auto regressive property
         logits_per_slot: int
             specifies the number of logits per element the pointer
-            network attends to; default is 2"""
-        super(Pointer, self).__init__()
+            network attends to; default is 1"""
+        super(PointerAfterLogits, self).__init__()
 
-        # the core processing layers
-        self.block = Block(
-            hidden_size, output_size * (1 + logits_per_slot), **kwargs)
+        # the core processing variables
+        self.block = Block(hidden_size,
+                           output_size * (1 + logits_per_slot),
+                           **kwargs)
+        self.logits_embedding = tf.keras.layers.Embedding(
+            logits_size, output_size, **kwargs)
 
         # these parameters need to be stored so that
-        # tf.keras.model.save_model works
+        # tf.layers.model.save_model works
         self.hidden_size = hidden_size
         self.output_size = output_size
+        self.logits_size = logits_size
         self.causal = causal
         self.logits_per_slot = logits_per_slot
         self.kwargs = kwargs
 
-
     def call(self, inputs, **kwargs):
-        """Runs a forward pass on a pointer network that generates
-        permutation matrices in log space
+        """Runs a forward pass on the logits of a transformer
+        inputs is an instance of TransformerInput
 
         Arguments:
 
@@ -55,13 +63,14 @@ class Pointer(tf.keras.layers.Layer):
 
         Returns:
 
-        outputs: tf.Tensor
-            a permutation matrix in log space that has the same shape
-            as the transformer attention weights"""
+        pointer_logits: tf.Tensor
+            the logits of a pointer network used to select locations to
+            insert words in a transformer"""
 
         # map the sequence into a latent space
         features = self.block(inputs.queries, **kwargs)
         q = features[..., :self.output_size]
+        q = q + self.logits_embedding(inputs.ids)
 
         # reshape keys to have logits_per_slot more time steps
         shape = tf.multiply(tf.shape(q), [1, self.logits_per_slot, 1])
@@ -89,15 +98,16 @@ class Pointer(tf.keras.layers.Layer):
 
         config: dict
             a dictionary that contains all parameters to the
-            keras base class and all class parameters"""
+            layers base class and all class parameters"""
 
         # these are all that is needed to rebuild this class
         config = dict(hidden_size=self.hidden_size,
                       output_size=self.output_size,
+                      logits_size=self.logits_size,
                       causal=self.causal,
                       logits_per_slot=self.logits_per_slot,
                       **self.kwargs)
 
-        base_config = super(Block, self).get_config()
+        base_config = super(PointerAfterLogits, self).get_config()
         return dict(list(base_config.items()) +
                     list(config.items()))

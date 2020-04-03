@@ -9,7 +9,7 @@ class Block(tf.keras.Sequential):
                  activation='relu',
                  **kwargs):
         """Creates a 'network-in-network' style block that is used
-        in self attention layers
+        in self attention variables
 
         Arguments:
 
@@ -20,10 +20,10 @@ class Block(tf.keras.Sequential):
             the number of units in the network output layer
             processed using a convolution
         activation: str
-            an input to tf.keras.layers.Activation for building
+            an input to tf.layers.variables.Activation for building
             an activation function"""
 
-        # order of layers is the same as a typical 'resnet'
+        # order of variables is the same as a typical 'resnet'
         norm0 = tf.keras.layers.LayerNormalization()
         relu0 = tf.keras.layers.Activation(activation)
         conv0 = tf.keras.layers.Conv1D(hidden_size,
@@ -50,7 +50,7 @@ class Block(tf.keras.Sequential):
                                      conv1])
 
         # these parameters need to be stored so that
-        # tf.keras.model.save_model works
+        # tf.layers.model.save_model works
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.activation = activation
@@ -64,7 +64,7 @@ class Block(tf.keras.Sequential):
 
         config: dict
             a dictionary that contains all parameters to the
-            keras base class and all class parameters"""
+            layers base class and all class parameters"""
 
         # these are all that is needed to rebuild this class
         config = dict(hidden_size=self.hidden_size,

@@ -1,8 +1,9 @@
+from indigo.nn.engine.layer import Layer
 from indigo.nn.position_encoding import position_encoding
 import tensorflow as tf
 
 
-class RegionFeature(tf.keras.layers.Layer):
+class RegionFeature(Layer):
 
     def __init__(self,
                  num_embeddings,
@@ -17,17 +18,17 @@ class RegionFeature(tf.keras.layers.Layer):
             the number of elements in the vocabulary which
             input sequences contain elements of
         hidden_size: int
-            the number of units in the hidden layers used
+            the number of units in the hidden variables used
             in each multi head attention layer"""
         super(RegionFeature, self).__init__()
 
         # these parameters need to be stored so that
-        # tf.keras.model.save_model works
+        # tf.layers.model.save_model works
         self.num_embeddings = num_embeddings
         self.hidden_size = hidden_size
         self.kwargs = kwargs
 
-        # the core processing layers
+        # the core processing variables
         self.word_embedding = tf.keras.layers.Embedding(
             num_embeddings, hidden_size, **kwargs)
         self.detection_embedding = tf.keras.layers.Embedding(
@@ -52,14 +53,11 @@ class RegionFeature(tf.keras.layers.Layer):
             same shape as inputs"""
 
         y = self.detection_embedding(inputs.values.detections, **kwargs)
-        y = self.dense(tf.concat([
+        inputs.values = self.dense(tf.concat([
             inputs.values.features,
             inputs.values.boxes, y], 2), **kwargs)
-
         a = position_encoding(tf.shape(inputs.queries)[1], self.hidden_size)
         inputs.queries = a + self.word_embedding(inputs.queries, **kwargs)
-
-        inputs.values = y
         return inputs
 
     def get_config(self):
@@ -70,7 +68,7 @@ class RegionFeature(tf.keras.layers.Layer):
 
         config: dict
             a dictionary that contains all parameters to the
-            keras base class and all class parameters"""
+            layers base class and all class parameters"""
 
         # these are all that is needed to rebuild this class
         config = dict(num_embeddings=self.num_embeddings,

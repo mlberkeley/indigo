@@ -1,15 +1,14 @@
+from indigo.nn.engine.sequential import Sequential
 from indigo.nn.layers.encoder_layer import EncoderLayer
 from indigo.nn.layers.decoder_layer import DecoderLayer
-from indigo.nn.features.word_feature import WordFeature
-from indigo.nn.features.image_feature import ImageFeature
+from indigo.nn.features.discrete_feature import DiscreteFeature
+from indigo.nn.features.continuous_feature import ContinuousFeature
 from indigo.nn.features.region_feature import RegionFeature
-from indigo.nn.base.logits import Logits
-from indigo.nn.layers.pointer import Pointer
-from indigo.nn.layers.pointer_and_logits import PointerAndLogits
-import tensorflow as tf
+from indigo.nn.variables.logits import Logits
+from indigo.nn.variables.pointer_after_logits import PointerAfterLogits
 
 
-class Transformer(tf.keras.Sequential):
+class Transformer(Sequential):
 
     def __init__(self,
                  num_embeddings,
@@ -24,7 +23,7 @@ class Transformer(tf.keras.Sequential):
                  final_layer='logits',
                  **kwargs):
         """Creates a Transformer Keras model for processing sequences
-        and uses the tf.keras.Sequential as backend
+        and uses the tf.layers.Sequential as backend
 
         Arguments:
 
@@ -32,13 +31,13 @@ class Transformer(tf.keras.Sequential):
             the number of elements in the vocabulary which
             input sequences contain elements of
         hidden_size: int
-            the number of units in the hidden layers used
+            the number of units in the hidden variables used
             in each multi head attention layer
         heads: int
             the number of heads in each multi head attention layer
             a good default is 4 or 8
         num_layers: int
-            the number of layers in the encoder and the decoder modules
+            the number of variables in the encoder and the decoder modules
             each layer consists of attention residual connections
         queries_dropout: float
             the ratio of units to drop during training to the
@@ -59,17 +58,20 @@ class Transformer(tf.keras.Sequential):
             specifies the class to use for the final layer in the transformer
             defaults to Logits if not specified"""
 
-        # TODO: the keras sequential does not technically yet
+        # TODO: the layers sequential does not technically yet
         #  support nested inputs but it should
         layers = []
 
         # the first layer in the transformer depends on the data modality
-        if first_layer == 'word':
-            layers.extend([WordFeature(num_embeddings, hidden_size, **kwargs)])
-        if first_layer == 'image':
-            layers.extend([ImageFeature(num_embeddings, hidden_size, **kwargs)])
+        if first_layer == 'discrete':
+            layers.extend([DiscreteFeature(
+                num_embeddings, hidden_size, **kwargs)])
+        if first_layer == 'continuous':
+            layers.extend([ContinuousFeature(
+                num_embeddings, hidden_size, **kwargs)])
         if first_layer == 'region':
-            layers.extend([RegionFeature(num_embeddings, hidden_size, **kwargs)])
+            layers.extend([RegionFeature(
+                num_embeddings, hidden_size, **kwargs)])
 
         # the encoder processes values and the decoder processes queries
         layers.extend([EncoderLayer(
@@ -82,21 +84,17 @@ class Transformer(tf.keras.Sequential):
             causal=causal, **kwargs) for _ in range(num_layers)])
 
         # the final layer in the transformer depends on the model purpose
-        if final_layer == 'logits':
+        if final_layer == 'logits' or final_layer == 'indigo':
             layers.extend([Logits(num_embeddings, **kwargs)])
-        if final_layer == 'pointer':
-            layers.extend([Pointer(
-                hidden_size // 2, hidden_size,
-                causal=causal, logits_per_slot=logits_per_slot, **kwargs)])
-        if final_layer == 'pointer_and_logits':
-            layers.extend([PointerAndLogits(
+        if final_layer == 'indigo':
+            layers.extend([PointerAfterLogits(
                 hidden_size // 2, hidden_size, num_embeddings,
                 causal=causal, logits_per_slot=logits_per_slot, **kwargs)])
 
         super(Transformer, self).__init__(layers)
 
         # these parameters need to be stored so that
-        # tf.keras.model.save_model works
+        # tf.layers.model.save_model works
         self.num_embeddings = num_embeddings
         self.hidden_size = hidden_size
         self.heads = heads
@@ -117,7 +115,7 @@ class Transformer(tf.keras.Sequential):
 
         config: dict
             a dictionary that contains all parameters to the
-            keras base class and all class parameters"""
+            layers base class and all class parameters"""
 
         # these are all that is needed to rebuild this class
         config = dict(num_embeddings=self.num_embeddings,

@@ -1,11 +1,11 @@
+from indigo.nn.engine.layer import Layer
 from indigo.nn.base.block import Block
-from indigo.nn.ops.attention import Attention
+from indigo.nn.base.attention import Attention
 from indigo.input import AttentionInput
-from indigo.input import TransformerInput
 import tensorflow as tf
 
 
-class DecoderWithPositionLayer(tf.keras.layers.Layer):
+class DecoderWithPositionLayer(Layer):
 
     def __init__(self,
                  input_size,
@@ -24,7 +24,7 @@ class DecoderWithPositionLayer(tf.keras.layers.Layer):
             the number of units in the input tensor to this layer
             also the output size of the model
         hidden_size: int
-            the number of units in the hidden layers used
+            the number of units in the hidden variables used
             in each multi head attention layer
         heads: int
             the number of heads in each multi head attention layer
@@ -40,7 +40,7 @@ class DecoderWithPositionLayer(tf.keras.layers.Layer):
             a causal mask to preserve the auto regressive property"""
         super(DecoderWithPositionLayer, self).__init__()
 
-        # the core attention and processing layers
+        # the core attention and processing variables
         self.attention0 = Attention(
             heads,
             queries_dropout=queries_dropout,
@@ -55,7 +55,7 @@ class DecoderWithPositionLayer(tf.keras.layers.Layer):
         self.pos_embedding = tf.keras.layers.Embedding(
             3, hidden_size * heads, **kwargs)
 
-        # the core attention and processing layers
+        # the core attention and processing variables
         self.attention1 = Attention(
             heads,
             queries_dropout=queries_dropout,
@@ -72,7 +72,7 @@ class DecoderWithPositionLayer(tf.keras.layers.Layer):
                             **kwargs)
 
         # these parameters need to be stored so that
-        # tf.keras.model.save_model works
+        # tf.layers.model.save_model works
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.heads = heads
@@ -141,7 +141,7 @@ class DecoderWithPositionLayer(tf.keras.layers.Layer):
 
         config: dict
             a dictionary that contains all parameters to the
-            keras base class and all class parameters"""
+            layers base class and all class parameters"""
 
         # these are all that is needed to rebuild this class
         config = dict(input_size=self.input_size,

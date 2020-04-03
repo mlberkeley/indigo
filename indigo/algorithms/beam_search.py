@@ -16,7 +16,7 @@ def beam_search(model_features,
         a dataclass that contains input features that will be used
         when decoding using the transformer
     model: Transformer
-        a keras model that accepts inputs in the form of the dataclass
+        a layers model that accepts inputs in the form of the dataclass
         TransformerInput and returns logits
     beam_size: int
         the number of beams to use when calculating a beam search

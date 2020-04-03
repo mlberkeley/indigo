@@ -178,13 +178,22 @@ def train_indigo_faster_rcnn_dataset(tfrecord_folder,
                 R, axis=2, exclusive=True, reverse=True)
 
         # perform a forward pass using the transformer model
-        logits = model(model_features)
+        logits, pointer = model(model_features)
+        pointer_ids = tf.tile(
+            tf.range(tf.shape(words)[1] - 1, dtype=tf.int32)[tf.newaxis],
+            [tf.shape(words)[0], 1])
 
         # calculate the loss function for training
         loss = tf.keras.losses.sparse_categorical_crossentropy(
             words[:, 1:], logits, from_logits=True, axis=-1)
-        total_loss = (tf.reduce_sum(loss * token_indicators[:, 1:]) /
-                      tf.reduce_sum(token_indicators[:, 1:]))
+        pointer_loss = tf.keras.losses.sparse_categorical_crossentropy(
+            pointer_ids, pointer, from_logits=True, axis=-1)
+        total_loss = (
+            tf.reduce_sum(loss * token_indicators[:, 1:]) /
+            tf.reduce_sum(token_indicators[:, 1:]))
+        total_loss = total_loss + (
+            tf.reduce_sum(pointer_loss * token_indicators[:, 1:]) /
+            tf.reduce_sum(token_indicators[:, 1:]))
 
         # monitor training by printing the loss
         if iteration % 100 == 0:

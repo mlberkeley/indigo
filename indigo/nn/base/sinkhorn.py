@@ -131,7 +131,7 @@ class Sinkhorn(tf.keras.layers.Layer):
 
         config: dict
             a dictionary that contains all parameters to the
-            keras base class and all class parameters"""
+            layers base class and all class parameters"""
 
         # these are all that is needed to rebuild this class
         config = dict(iterations=self.iterations)

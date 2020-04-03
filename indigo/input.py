@@ -6,7 +6,7 @@ import tensorflow as tf
 @dataclass
 class AttentionInput(object):
     """Fields of a data class for computing multihead attention
-    in indigo.layers.attention.Attention
+    in indigo.variables.attention.Attention
 
     Arguments:
 
@@ -28,7 +28,7 @@ class AttentionInput(object):
         in a multihead attention mechanism
 
     _keras_mask: tf.Tensor
-        a required placeholder for tf.keras.Sequential"""
+        a required placeholder for tf.layers.Sequential"""
 
     # these are required for the network
     queries: Any = None
@@ -65,7 +65,7 @@ class TransformerInput(object):
         in a multihead attention mechanism
 
     _keras_mask: tf.Tensor
-        a required placeholder for tf.keras.Sequential"""
+        a required placeholder for tf.layers.Sequential"""
 
     # these are required for the network
     queries: Any = None
