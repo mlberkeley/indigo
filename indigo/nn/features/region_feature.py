@@ -56,11 +56,9 @@ class RegionFeature(tf.keras.layers.Layer):
             inputs.values.features,
             inputs.values.boxes, y], 2), **kwargs)
 
-        return TransformerInput(
-            queries=self.word_embedding(inputs.queries, **kwargs),
-            values=y,
-            queries_mask=inputs.queries_mask,
-            values_mask=inputs.values_mask)
+        inputs.queries = self.word_embedding(inputs.queries, **kwargs)
+        inputs.values = y
+        return inputs
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

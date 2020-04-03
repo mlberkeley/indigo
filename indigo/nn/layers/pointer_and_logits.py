@@ -74,7 +74,7 @@ class PointerAndLogits(tf.keras.layers.Layer):
         # map the sequence into a latent space
         features = self.block(inputs.queries, **kwargs)
         q = features[..., :self.output_size]
-        q = q + self.logits_embedding(inputs.target)
+        q = q + self.logits_embedding(inputs.targets)
 
         # reshape keys to have logits_per_slot more time steps
         shape = tf.multiply(tf.shape(q), [1, self.logits_per_slot, 1])

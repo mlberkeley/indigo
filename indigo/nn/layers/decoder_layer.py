@@ -109,12 +109,7 @@ class DecoderLayer(tf.keras.layers.Layer):
         y = self.attention0(attention_input, **kwargs)
         y = self.block1(y, **kwargs)
 
-        inputs = TransformerInput(
-            queries=inputs.queries + y,
-            values=inputs.values,
-            queries_mask=inputs.queries_mask,
-            values_mask=inputs.values_mask)
-
+        inputs.queries = inputs.queries + y
         queries = self.block2(inputs.queries, **kwargs)
         keys, values = tf.split(
             self.block3(inputs.values, **kwargs), 2, axis=2)
@@ -129,11 +124,8 @@ class DecoderLayer(tf.keras.layers.Layer):
         y = self.attention1(attention_input, **kwargs)
         y = self.block4(y, **kwargs)
 
-        return TransformerInput(
-            queries=inputs.queries + y,
-            values=inputs.values,
-            queries_mask=inputs.queries_mask,
-            values_mask=inputs.values_mask)
+        inputs.queries = inputs.queries + y
+        return inputs
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

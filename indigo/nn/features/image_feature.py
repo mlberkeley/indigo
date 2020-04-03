@@ -49,11 +49,9 @@ class ImageFeature(tf.keras.layers.Layer):
             the result of applying a multi head attention mechanism
             same shape as inputs"""
 
-        return TransformerInput(
-            queries=self.embedding(inputs.queries, **kwargs),
-            values=self.dense(inputs.values, **kwargs),
-            queries_mask=inputs.queries_mask,
-            values_mask=inputs.values_mask)
+        inputs.queries = self.embedding(inputs.queries, **kwargs)
+        inputs.values = self.dense(inputs.values, **kwargs)
+        return inputs
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

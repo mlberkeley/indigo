@@ -92,12 +92,8 @@ class EncoderLayer(tf.keras.layers.Layer):
 
         y = self.attention(attention_input, **kwargs)
         y = self.block1(y, **kwargs)
-
-        return TransformerInput(
-            queries=inputs.queries,
-            values=inputs.values + y,
-            queries_mask=inputs.queries_mask,
-            values_mask=inputs.values_mask)
+        inputs.values = inputs.values + y
+        return inputs
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
