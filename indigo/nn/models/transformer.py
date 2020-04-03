@@ -18,7 +18,7 @@ class Transformer(Sequential):
                  queries_dropout=0.,
                  values_dropout=0.,
                  causal=True,
-                 logits_per_slot=2,
+                 logits_per_slot=1,
                  first_layer='region',
                  final_layer='logits',
                  **kwargs):

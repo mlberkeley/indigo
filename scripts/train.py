@@ -37,7 +37,7 @@ if __name__ == "__main__":
                         values_dropout=0.,
                         causal=True,
                         first_layer='region',
-                        final_layer='logits')
+                        final_layer='indigo')
 
     train_faster_rcnn_dataset(args.tfrecord_folder,
                               args.batch_size,

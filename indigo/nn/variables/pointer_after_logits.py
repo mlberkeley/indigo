@@ -33,23 +33,20 @@ class PointerAfterLogits(Pointer):
         logits_per_slot: int
             specifies the number of logits per element the pointer
             network attends to; default is 1"""
-        super(PointerAfterLogits, self).__init__()
+        super(PointerAfterLogits, self).__init__(
+            hidden_size,
+            output_size,
+            causal=causal,
+            logits_per_slot=logits_per_slot,
+            **kwargs)
 
         # the core processing variables
-        self.block = Block(hidden_size,
-                           output_size * (1 + logits_per_slot),
-                           **kwargs)
         self.logits_embedding = tf.keras.layers.Embedding(
             logits_size, output_size, **kwargs)
 
         # these parameters need to be stored so that
         # tf.layers.model.save_model works
-        self.hidden_size = hidden_size
-        self.output_size = output_size
         self.logits_size = logits_size
-        self.causal = causal
-        self.logits_per_slot = logits_per_slot
-        self.kwargs = kwargs
 
     def call(self, inputs, **kwargs):
         """Runs a forward pass on the logits of a transformer
@@ -82,11 +79,12 @@ class PointerAfterLogits(Pointer):
         mask = tf.logical_and(tf.expand_dims(inputs.queries_mask, 2),
                               tf.expand_dims(inputs.queries_mask, 1))
         if self.causal:
-            mask = tf.logical_and(mask, causal_mask(scores))
+            mask = tf.logical_and(
+                mask, causal_mask(scores[:, :, ::self.logits_per_slot]))
 
         # filter by removing logits for elements that are invalid
         # mask must be repeated to correct the shape
-        mask = tf.repeat(mask, [1, 1, self.logits_per_slot])
+        mask = tf.repeat(mask, self.logits_per_slot, axis=2)
         return tf.where(
             mask, scores, tf.fill(tf.shape(scores), -999999.))
 

@@ -34,11 +34,11 @@ def greedy_search(inputs,
     # create an empty partial sentence and corresponding mask
     inputs.queries = tf.fill([batch_size, 1], 2)
     inputs.queries_mask = tf.fill([batch_size, 1], True)
-    inputs.ids = tf.fill([batch_size, 1], 2)
+    inputs.ids = tf.fill([batch_size, 0], 2)
     inputs.positions = tf.fill([batch_size, 1, 1], 0)
     inputs.log_probs = tf.zeros([batch_size])
 
-    region = inputs.values
+    inputs.region = inputs.values
 
     # loop for a maximum of max_iterations decoding steps
     for i in range(max_iterations):
@@ -49,8 +49,8 @@ def greedy_search(inputs,
 
         # format the inputs for the transformer in the next round
         inputs, closed_beams = model.greedy_search(inputs, closed_beams)
-        inputs.queries = inputs.ids
-        inputs.queries_mask = tf.fill(tf.shape(inputs.ids), True)
-        inputs.values = region
+        inputs.queries = tf.concat([tf.fill([batch_size, 1], 2), inputs.ids], axis=1)
+        inputs.queries_mask = tf.fill(tf.shape(inputs.queries), True)
+        inputs.values = inputs.region
 
     return inputs.ids, inputs.log_probs

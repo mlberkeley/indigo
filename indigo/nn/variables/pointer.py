@@ -73,11 +73,12 @@ class Pointer(Layer):
         mask = tf.logical_and(tf.expand_dims(inputs.queries_mask, 2),
                               tf.expand_dims(inputs.queries_mask, 1))
         if self.causal:
-            mask = tf.logical_and(mask, causal_mask(scores))
+            mask = tf.logical_and(
+                mask, causal_mask(scores[:, :, ::self.logits_per_slot]))
 
         # filter by removing logits for elements that are invalid
         # mask must be repeated to correct the shape
-        mask = tf.repeat(mask, [1, 1, self.logits_per_slot])
+        mask = tf.repeat(mask, self.logits_per_slot, axis=2)
         return tf.where(
             mask, scores, tf.fill(tf.shape(scores), -999999.))
 
@@ -102,10 +103,13 @@ class Pointer(Layer):
 
         pointer = self.call(inputs, **kwargs)
         absolute_pos = tf.reduce_sum(tf.nn.relu(inputs.positions), axis=2)
-        return tf.keras.losses.sparse_categorical_crossentropy(
+        return 0.001 * tf.keras.losses.sparse_categorical_crossentropy(
             absolute_pos, pointer, from_logits=True), inputs
 
-    def greedy_search(self, inputs, closed, **kwargs):
+    def greedy_search(self,
+                      inputs,
+                      closed,
+                      **kwargs):
         """A function that implements a forward pass and updates the decoding
         partial sequence using greedy search
 
@@ -146,7 +150,12 @@ class Pointer(Layer):
         inputs.log_probs = inputs.log_probs + log_probs[..., 0]
         return inputs, closed
 
-    def beam_search(self, inputs, closed, beam_size, **kwargs):
+    def beam_search(self,
+                    inputs,
+                    closed,
+                    last_beam_size,
+                    beam_size,
+                    **kwargs):
         """A function that implements a forward pass and updates the decoding
         partial sequence using a beam search
 
@@ -158,6 +167,12 @@ class Pointer(Layer):
         closed: tf.Tensor
             a boolean tensor where true values indicate that a beam has
             finished decoding and should not be modified
+        last_beam_size: int
+            the number of beams that were expanded by the last layer in an
+            autoregressive model
+        beam_size: int
+            the number of beams to be expanded by this layer in an
+            autoregressive model
 
         Returns:
 
@@ -166,7 +181,10 @@ class Pointer(Layer):
             be mutated by this layer during decoding
         closed: tf.Tensor
             a boolean tensor where true values indicate that a beam has
-            finished decoding and should not be modified"""
+            finished decoding and should not be modified
+        beam_size: int
+            the number of beams to be expanded by this layer in an
+            autoregressive model"""
 
         pointer = tf.math.log_softmax(self.call(inputs, **kwargs)[:, -1])
         log_probs, samples = tf.math.top_k(pointer, k=beam_size)
@@ -203,7 +221,7 @@ class Pointer(Layer):
             tf.concat([pos, -r[:, :, tf.newaxis]], axis=2),
             tf.pad(r, [[0, 0], [0, 1]])[:, tf.newaxis, :]], axis=1)
 
-        return inputs, closed
+        return inputs, closed, beam_size
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

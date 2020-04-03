@@ -2,6 +2,7 @@ from indigo.data.load import faster_rcnn_dataset
 from indigo.input import TransformerInput
 from indigo.input import RegionFeatureInput
 from indigo.algorithms.greedy_search import greedy_search
+from indigo.algorithms.beam_search import beam_search
 import tensorflow as tf
 import os
 
