@@ -1,4 +1,4 @@
-from indigo.input import TransformerInput
+from indigo.nn.position_encoding import position_encoding
 import tensorflow as tf
 
 
@@ -49,8 +49,12 @@ class WordFeature(tf.keras.layers.Layer):
             the result of applying a multi head attention mechanism
             same shape as inputs"""
 
-        inputs.queries = self.query_embedding(inputs.queries, **kwargs)
-        inputs.values = self.key_embedding(inputs.values, **kwargs)
+        a = position_encoding(tf.shape(inputs.queries)[1], self.hidden_size)
+        inputs.queries = a + self.query_embedding(inputs.queries, **kwargs)
+
+        b = position_encoding(tf.shape(inputs.values)[1], self.hidden_size)
+        inputs.values = b + self.key_embedding(inputs.values, **kwargs)
+
         return inputs
 
     def get_config(self):

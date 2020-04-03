@@ -1,4 +1,4 @@
-from indigo.input import TransformerInput
+from indigo.nn.position_encoding import position_encoding
 import tensorflow as tf
 
 
@@ -56,7 +56,9 @@ class RegionFeature(tf.keras.layers.Layer):
             inputs.values.features,
             inputs.values.boxes, y], 2), **kwargs)
 
-        inputs.queries = self.word_embedding(inputs.queries, **kwargs)
+        a = position_encoding(tf.shape(inputs.queries)[1], self.hidden_size)
+        inputs.queries = a + self.word_embedding(inputs.queries, **kwargs)
+
         inputs.values = y
         return inputs
 

@@ -1,4 +1,4 @@
-from indigo.input import TransformerInput
+from indigo.nn.position_encoding import position_encoding
 import tensorflow as tf
 
 
@@ -49,7 +49,9 @@ class ImageFeature(tf.keras.layers.Layer):
             the result of applying a multi head attention mechanism
             same shape as inputs"""
 
-        inputs.queries = self.embedding(inputs.queries, **kwargs)
+        a = position_encoding(tf.shape(inputs.queries)[1], self.hidden_size)
+        inputs.queries = a + self.embedding(inputs.queries, **kwargs)
+
         inputs.values = self.dense(inputs.values, **kwargs)
         return inputs
 
