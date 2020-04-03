@@ -24,7 +24,7 @@ class Block(tf.keras.Sequential):
             an activation function"""
 
         # order of variables is the same as a typical 'resnet'
-        norm0 = tf.keras.layers.LayerNormalization()
+        norm0 = tf.keras.layers.LayerNormalization(**kwargs)
         relu0 = tf.keras.layers.Activation(activation)
         conv0 = tf.keras.layers.Conv1D(hidden_size,
                                        1,
@@ -32,7 +32,7 @@ class Block(tf.keras.Sequential):
                                        activation=None,
                                        **kwargs)
 
-        norm1 = tf.keras.layers.LayerNormalization()
+        norm1 = tf.keras.layers.LayerNormalization(**kwargs)
         relu1 = tf.keras.layers.Activation(activation)
         conv1 = tf.keras.layers.Conv1D(output_size,
                                        1,

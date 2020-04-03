@@ -38,6 +38,8 @@ def greedy_search(inputs,
     inputs.positions = tf.fill([batch_size, 1, 1], 0)
     inputs.log_probs = tf.zeros([batch_size])
 
+    region = inputs.values
+
     # loop for a maximum of max_iterations decoding steps
     for i in range(max_iterations):
 
@@ -49,5 +51,6 @@ def greedy_search(inputs,
         inputs, closed_beams = model.greedy_search(inputs, closed_beams)
         inputs.queries = inputs.ids
         inputs.queries_mask = tf.fill(tf.shape(inputs.ids), True)
+        inputs.values = region
 
     return inputs.ids, inputs.log_probs

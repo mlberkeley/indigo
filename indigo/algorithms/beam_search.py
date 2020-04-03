@@ -55,6 +55,8 @@ def beam_search(inputs,
     inputs.positions = tf.fill([batch_size * beam_size, 1, 1], 0)
     inputs.log_probs = tf.zeros([batch_size * beam_size])
 
+    region = inputs.values
+
     # loop for a maximum of max_iterations decoding steps
     for i in range(max_iterations):
 
@@ -66,6 +68,7 @@ def beam_search(inputs,
         inputs, closed_beams = model.beam_search(inputs, closed_beams, beam_size)
         inputs.queries = inputs.ids
         inputs.queries_mask = tf.fill(tf.shape(inputs.ids), True)
+        inputs.values = region
 
     # decoding is finished so un flatten the beam dimension
     # returns a shape like [batch_size, beam_size, sequence_length]

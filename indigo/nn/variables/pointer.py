@@ -127,7 +127,7 @@ class Pointer(Layer):
             a boolean tensor where true values indicate that a beam has
             finished decoding and should not be modified"""
 
-        pointer = tf.math.log_softmax(self.call(inputs.queries, **kwargs)[:, -1])
+        pointer = tf.math.log_softmax(self.call(inputs, **kwargs)[:, -1])
         log_probs, samples = tf.math.top_k(pointer, k=1)
 
         log_probs = tf.where(
@@ -168,7 +168,7 @@ class Pointer(Layer):
             a boolean tensor where true values indicate that a beam has
             finished decoding and should not be modified"""
 
-        pointer = tf.math.log_softmax(self.call(inputs.queries, **kwargs)[:, -1])
+        pointer = tf.math.log_softmax(self.call(inputs, **kwargs)[:, -1])
         log_probs, samples = tf.math.top_k(pointer, k=beam_size)
 
         log_probs = tf.where(

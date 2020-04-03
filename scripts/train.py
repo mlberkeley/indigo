@@ -15,13 +15,13 @@ if __name__ == "__main__":
     parser.add_argument(
         '--vocab_file', type=str, default='vocab.txt')
     parser.add_argument(
-        '--num_epochs', type=int, default=10)
+        '--num_epochs', type=int, default=100000)
     parser.add_argument(
         '--model_ckpt', type=str, default='ckpt/decoder')
     parser.add_argument(
-        '--embedding_size', type=int, default=1024)
+        '--embedding_size', type=int, default=256)
     parser.add_argument(
-        '--num_layers', type=int, default=2)
+        '--num_layers', type=int, default=1)
     args = parser.parse_args()
 
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:

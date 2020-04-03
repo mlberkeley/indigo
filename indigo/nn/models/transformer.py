@@ -19,7 +19,7 @@ class Transformer(Sequential):
                  values_dropout=0.,
                  causal=True,
                  logits_per_slot=2,
-                 first_layer='word',
+                 first_layer='region',
                  final_layer='logits',
                  **kwargs):
         """Creates a Transformer Keras model for processing sequences

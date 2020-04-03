@@ -46,8 +46,8 @@ class EncoderLayer(Layer):
             queries_dropout=queries_dropout,
             values_dropout=values_dropout,
             causal=causal)
-        self.block0 = Block(hidden_size * heads // 2,
-                            hidden_size * heads * 3,
+        self.block0 = Block(hidden_size // 2,
+                            hidden_size * 3,
                             **kwargs)
         self.block1 = Block(input_size // 2,
                             input_size,
@@ -80,9 +80,7 @@ class EncoderLayer(Layer):
             same shape as inputs"""
 
         activations = self.block0(inputs.values, **kwargs)
-        queries, keys, values = tf.split(
-            activations, 3, axis=2)
-
+        queries, keys, values = tf.split(activations, 3, axis=2)
         attention_input = AttentionInput(
             queries=queries,
             keys=keys,

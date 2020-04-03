@@ -36,8 +36,9 @@ def train_faster_rcnn_dataset(tfrecord_folder,
         from words to integers"""
 
     # create a training pipeline
+    init_lr = 0.001
     dataset = faster_rcnn_dataset(tfrecord_folder, batch_size)
-    optim = tf.keras.optimizers.Adam(learning_rate=0.0001)
+    optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
 
     def loss_function(iteration, batch):
 
@@ -51,11 +52,13 @@ def train_faster_rcnn_dataset(tfrecord_folder,
         words = batch["words"]
         token_indicators = batch["token_indicators"]
 
+        region = RegionFeatureInput(features=boxes_features,
+                                    boxes=boxes,
+                                    detections=detections)
+
         inputs = TransformerInput(
             queries=words[:, :-1],
-            values=RegionFeatureInput(features=boxes_features,
-                                      boxes=boxes,
-                                      detections=detections),
+            values=region,
             queries_mask=tf.greater(token_indicators[:, :-1], 0.),
             values_mask=tf.greater(image_indicators, 0.))
 
@@ -68,12 +71,38 @@ def train_faster_rcnn_dataset(tfrecord_folder,
                 R, axis=2, exclusive=True, reverse=True)
 
         # perform a forward pass using the transformer model
-        total_loss, _ = model.loss(inputs)
+        total_loss, _ = model.loss(inputs, training=True)
+
+        total_loss = tf.reduce_sum(
+            total_loss * token_indicators[:, :-1], axis=1)
+        total_loss = total_loss / tf.reduce_sum(
+                token_indicators[:, :-1], axis=1)
+
+        total_loss = tf.reduce_mean(total_loss)
+
+        print('Iteration: {} Loss: {}'.format(iteration,
+                                              total_loss))
 
         # monitor training by printing the loss
         if iteration % 100 == 0:
-            print('Iteration: {} Loss: {}'.format(iteration,
-                                                  total_loss))
+
+            region = RegionFeatureInput(features=boxes_features,
+                                        boxes=boxes,
+                                        detections=detections)
+
+            inputs = TransformerInput(
+                queries=words[:, :-1],
+                values=region,
+                queries_mask=tf.greater(token_indicators[:, :-1], 0.),
+                values_mask=tf.greater(image_indicators, 0.))
+
+            # these labels correspond to left-to-right ordering
+            inputs.ids = words[:, 1:]
+            R = tf.eye(tf.shape(words)[1] - 1,
+                       batch_shape=tf.shape(words)[:1], dtype=tf.int32)
+            inputs.positions = tf.math.cumsum(
+                R, axis=2, exclusive=True) - tf.math.cumsum(
+                    R, axis=2, exclusive=True, reverse=True)
 
             cap, log_p = greedy_search(inputs,
                                        model,
@@ -113,5 +142,4 @@ def train_faster_rcnn_dataset(tfrecord_folder,
         model.save_weights(model_ckpt, save_format='tf')
 
         # anneal the model learning rate after an epoch
-        optim.lr.assign(optim.lr / tf.sqrt(
-            tf.constant(10., dtype=tf.float32)))
+        optim.lr.assign(init_lr * (1 - epoch / num_epoch))

@@ -43,7 +43,7 @@ class Layer(tf.keras.layers.Layer):
             a dataclass that stores partial decoding information that will
             be mutated by this layer during decoding"""
 
-        return self.call(inputs, **kwargs)
+        return self.call(inputs, **kwargs), closed
 
     def beam_search(self, inputs, closed, beam_size, **kwargs):
         """A function that implements a forward pass and updates the decoding
@@ -64,4 +64,4 @@ class Layer(tf.keras.layers.Layer):
             a dataclass that stores partial decoding information that will
             be mutated by this layer during decoding"""
 
-        return self.call(inputs, **kwargs)
+        return self.call(inputs, **kwargs), closed

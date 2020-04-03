@@ -88,7 +88,7 @@ class Logits(Layer):
             a boolean tensor where true values indicate that a beam has
             finished decoding and should not be modified"""
 
-        logits = tf.math.log_softmax(self.call(inputs.queries, **kwargs)[:, -1])
+        logits = tf.math.log_softmax(self.call(inputs, **kwargs)[:, -1])
         log_probs, samples = tf.math.top_k(logits, k=1)
 
         log_probs = tf.where(
@@ -125,7 +125,7 @@ class Logits(Layer):
             a boolean tensor where true values indicate that a beam has
             finished decoding and should not be modified"""
 
-        logits = tf.math.log_softmax(self.call(inputs.queries, **kwargs)[:, -1])
+        logits = tf.math.log_softmax(self.call(inputs, **kwargs)[:, -1])
         log_probs, samples = tf.math.top_k(logits, k=beam_size)
 
         log_probs = tf.where(

@@ -46,8 +46,8 @@ class DecoderLayer(Layer):
             queries_dropout=queries_dropout,
             values_dropout=values_dropout,
             causal=causal)
-        self.block0 = Block(hidden_size * heads // 2,
-                            hidden_size * heads * 3,
+        self.block0 = Block(hidden_size // 2,
+                            hidden_size * 3,
                             **kwargs)
         self.block1 = Block(input_size // 2,
                             input_size,
@@ -59,11 +59,11 @@ class DecoderLayer(Layer):
             queries_dropout=queries_dropout,
             values_dropout=values_dropout,
             causal=False)
-        self.block2 = Block(hidden_size * heads // 2,
-                            hidden_size * heads,
+        self.block2 = Block(hidden_size // 2,
+                            hidden_size,
                             **kwargs)
-        self.block3 = Block(hidden_size * heads // 2,
-                            hidden_size * heads * 2,
+        self.block3 = Block(hidden_size // 2,
+                            hidden_size * 2,
                             **kwargs)
         self.block4 = Block(input_size // 2,
                             input_size,

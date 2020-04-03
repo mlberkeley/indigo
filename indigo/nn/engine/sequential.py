@@ -48,8 +48,8 @@ class Sequential(tf.keras.Sequential):
             be mutated by this layer during decoding"""
 
         for layer in self.layers:
-            batch, inputs = layer.greedy_search(inputs, closed, **kwargs)
-        return inputs
+            inputs, closed = layer.greedy_search(inputs, closed, **kwargs)
+        return inputs, closed
 
     def beam_search(self, inputs, closed, beam_size, **kwargs):
         """A function that implements a forward pass and updates the decoding
@@ -71,5 +71,5 @@ class Sequential(tf.keras.Sequential):
             be mutated by this layer during decoding"""
 
         for layer in self.layers:
-            batch, inputs = layer.beam_search(inputs, closed, beam_size, **kwargs)
-        return inputs
+            inputs, closed = layer.beam_search(inputs, closed, beam_size, **kwargs)
+        return inputs, closed
