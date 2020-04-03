@@ -24,7 +24,7 @@ class Layer(tf.keras.layers.Layer):
 
         return 0.0, self.call(inputs, **kwargs)
 
-    def greedy_update(self, inputs, **kwargs):
+    def greedy_search(self, inputs, closed, **kwargs):
         """A function that implements a forward pass and updates the decoding
         partial sequence using greedy search
 
@@ -33,6 +33,9 @@ class Layer(tf.keras.layers.Layer):
         batch: Dataclass
             a dataclass that stores partial decoding information that will
             be mutated by this layer during decoding
+        closed: tf.Tensor
+            a boolean tensor where true values indicate that a beam has
+            finished decoding and should not be modified
 
         Returns:
 
@@ -42,7 +45,7 @@ class Layer(tf.keras.layers.Layer):
 
         return self.call(inputs, **kwargs)
 
-    def beam_update(self, inputs, **kwargs):
+    def beam_search(self, inputs, closed, beam_size, **kwargs):
         """A function that implements a forward pass and updates the decoding
         partial sequence using a beam search
 
@@ -51,6 +54,9 @@ class Layer(tf.keras.layers.Layer):
         batch: Dataclass
             a dataclass that stores partial decoding information that will
             be mutated by this layer during decoding
+        closed: tf.Tensor
+            a boolean tensor where true values indicate that a beam has
+            finished decoding and should not be modified
 
         Returns:
 

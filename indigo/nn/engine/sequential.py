@@ -28,7 +28,7 @@ class Sequential(tf.keras.Sequential):
             total_loss = total_loss + loss
         return total_loss, inputs
 
-    def greedy_update(self, inputs, **kwargs):
+    def greedy_search(self, inputs, closed, **kwargs):
         """A function that implements a forward pass and updates the decoding
         partial sequence using greedy search
 
@@ -37,6 +37,9 @@ class Sequential(tf.keras.Sequential):
         batch: Dataclass
             a dataclass that stores partial decoding information that will
             be mutated by this layer during decoding
+        closed: tf.Tensor
+            a boolean tensor where true values indicate that a beam has
+            finished decoding and should not be modified
 
         Returns:
 
@@ -45,10 +48,10 @@ class Sequential(tf.keras.Sequential):
             be mutated by this layer during decoding"""
 
         for layer in self.layers:
-            batch, inputs = layer.greedy_update(inputs, **kwargs)
+            batch, inputs = layer.greedy_search(inputs, closed, **kwargs)
         return inputs
 
-    def beam_update(self, inputs, **kwargs):
+    def beam_search(self, inputs, closed, beam_size, **kwargs):
         """A function that implements a forward pass and updates the decoding
         partial sequence using a beam search
 
@@ -57,6 +60,9 @@ class Sequential(tf.keras.Sequential):
         batch: Dataclass
             a dataclass that stores partial decoding information that will
             be mutated by this layer during decoding
+        closed: tf.Tensor
+            a boolean tensor where true values indicate that a beam has
+            finished decoding and should not be modified
 
         Returns:
 
@@ -65,5 +71,5 @@ class Sequential(tf.keras.Sequential):
             be mutated by this layer during decoding"""
 
         for layer in self.layers:
-            batch, inputs = layer.beam_update(inputs, **kwargs)
+            batch, inputs = layer.beam_search(inputs, closed, beam_size, **kwargs)
         return inputs
