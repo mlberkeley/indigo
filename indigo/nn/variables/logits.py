@@ -76,7 +76,7 @@ class Logits(Layer):
 
         Arguments:
 
-        batch: Dataclass
+        inputs: Dataclass
             a dataclass that stores partial decoding information that will
             be mutated by this layer during decoding
         closed: tf.Tensor
@@ -92,17 +92,24 @@ class Logits(Layer):
             a boolean tensor where true values indicate that a beam has
             finished decoding and should not be modified"""
 
+        # compute a distribution over tokens; note that only one token
+        # is sampled yet top_k is a convenient function
         logits = tf.math.log_softmax(self.call(inputs, **kwargs)[:, -1])
-        log_probs, samples = tf.math.top_k(logits, k=1)
+        log_probs, ids = tf.math.top_k(logits, k=1)
 
-        log_probs = tf.where(closed[:, tf.newaxis],
-                             tf.zeros_like(log_probs), log_probs)
-        samples = tf.where(closed[:, tf.newaxis],
-                           tf.zeros_like(samples), samples)
+        # mask the log probabilities and tokens of already completed
+        # beams so that they are unchanged when decoding
+        mask = closed[:, tf.newaxis]
+        log_probs = tf.where(mask, tf.zeros_like(log_probs), log_probs)
+        ids = tf.where(mask, tf.zeros_like(ids), ids)
 
-        inputs.ids = tf.concat([inputs.ids, samples], 1)
+        # concatenate the sampled tokens to the beam and prepare the
+        # model outputs for the next layer; also compute if we
+        # has finished decoding by predicting the end token
+        inputs.ids = tf.concat([inputs.ids, ids], 1)
         inputs.log_probs = inputs.log_probs + log_probs[..., 0]
-        return inputs, tf.logical_or(closed, tf.equal(samples[:, 0], 3))
+        return inputs, tf.logical_or(
+            closed, tf.equal(ids[:, 0], 3))
 
     def beam_search(self,
                     inputs,
@@ -115,7 +122,7 @@ class Logits(Layer):
 
         Arguments:
 
-        batch: Dataclass
+        inputs: Dataclass
             a dataclass that stores partial decoding information that will
             be mutated by this layer during decoding
         closed: tf.Tensor
@@ -140,47 +147,82 @@ class Logits(Layer):
             the number of beams to be expanded by this layer in an
             autoregressive model"""
 
-        # TODO: Brandon
-        #  something is not quite right with this method
-
+        # compute a distribution over tokens
         logits = tf.math.log_softmax(self.call(inputs, **kwargs)[:, -1])
-        log_probs, samples = tf.math.top_k(logits, k=beam_size)
-        batch_size = int(tf.shape(logits)[0].numpy() // last_beam_size)
+        batch_size = int(tf.shape(logits)[0] // last_beam_size)
 
-        log_probs = tf.where(closed[:, tf.newaxis], tf.zeros_like(log_probs), log_probs)
-        samples = tf.where(closed[:, tf.newaxis], tf.zeros_like(samples), samples)
+        # sample the top beam_size candidates
+        log_probs, ids = tf.math.top_k(logits, k=beam_size)
 
-        log_probs = tf.reshape(log_probs, [-1, last_beam_size, beam_size])
-        log_probs = tf.reshape(inputs.log_probs, [-1, last_beam_size, 1]) + log_probs
-        log_probs = tf.reshape(log_probs, [-1, last_beam_size * beam_size])
+        # when a beam is closed all candidates are the same
+        # this prevents the same candidates from being sampled twice
+        first = tf.one_hot(tf.fill(tf.shape(log_probs)[:1], 0), beam_size)
+        closed_log_probs = tf.where(tf.equal(first, 0), tf.fill(
+            tf.shape(first), -999999.), tf.fill(tf.shape(first), 0.))
+
+        # when a beam is closed special behavior is required
+        # do not change the log probability and append only pad tokens
+        mask = closed[:, tf.newaxis]
+        log_probs = tf.where(mask, closed_log_probs, log_probs)
+        ids = tf.where(mask, tf.zeros_like(ids), ids)
+
+        # manipulate the log probabilities to extract all possible
+        # next beam candidates and their probability
+        log_probs = tf.reshape(log_probs, [
+            batch_size, last_beam_size, beam_size])
+        log_probs = tf.reshape(inputs.log_probs, [
+            batch_size, last_beam_size, 1]) + log_probs
+        log_probs = tf.reshape(log_probs, [
+            batch_size, last_beam_size * beam_size])
+
+        # select the top beam_size candidates
         log_probs, beam_ids = tf.math.top_k(log_probs, k=beam_size)
 
+        # these indices may be a bit subtle; they work as follows
+        # the last dim has last_beam_size * beam_size elements
+        # the first beam_size elements represent candidate proposals
+        # from a single original beam
         new_beam_ids = tf.math.floormod(beam_ids, beam_size)
-        samples = tf.reshape(samples, [-1, last_beam_size * beam_size])
-        samples = tf.gather(samples, new_beam_ids, batch_dims=1)
-        samples = tf.reshape(samples, [-1, 1])
-
         old_beam_ids = tf.math.floordiv(beam_ids, beam_size)
 
+        # select the ids based on their beams that are from the beams with
+        # highest log probability
+        ids = tf.reshape(ids, [batch_size, last_beam_size * beam_size])
+        ids = tf.gather(ids, new_beam_ids, batch_dims=1)
+        ids = tf.reshape(ids, [batch_size * beam_size, 1])
+
+        # this function helps select the hidden activations from
+        # inputs that correspond to old selected beams
+        # this is necessary because future layers may depend on activations
+        # that are a function of which beam was selected
         def select_beams(tensor):
-            tensor = tf.stack(tf.split(tensor, batch_size, axis=0), axis=0)
-            tensor = tf.gather(tensor, old_beam_ids, batch_dims=1)
-            return tf.concat(tf.unstack(tensor, axis=0), axis=0)
+            return tf.concat(tf.unstack(tf.gather(tf.stack(tf.split(
+                tensor, batch_size, axis=0), axis=0),
+                old_beam_ids, batch_dims=1), axis=0), axis=0)
 
-        data_dict = {x: y for x, y in inputs.__dict__.items() if tf.is_tensor(y)}
-        data_dict = tree.map_structure(select_beams, data_dict)
-        for key, value in data_dict.items():
-            inputs.__dict__[key] = value
+        # this function helps perform the previously described selection
+        # operation over the contents of a python 3.7 dataclass
+        # dataclasses are used as input containers for our models and
+        # help deal with multiple-input layers and losses
+        def map_dataclass(func, obj):
+            data_dict = tree.map_structure(func, {
+                x: y for x, y in obj.__dict__.items() if tf.is_tensor(y)})
+            for key, value in data_dict.items():
+                obj.__dict__[key] = value
 
-        data_dict = {x: y for x, y in inputs.region.__dict__.items() if tf.is_tensor(y)}
-        data_dict = tree.map_structure(select_beams, data_dict)
-        for key, value in data_dict.items():
-            inputs.region.__dict__[key] = value
+        # select the image features and the transformer hidden activations
+        # that correspond to the selected beams after performing
+        # a step of beam search
+        map_dataclass(select_beams, inputs)
+        map_dataclass(select_beams, inputs.region)
 
-        inputs.ids = tf.concat([inputs.ids, samples], 1)
+        # concatenate the sampled tokens to the beam and prepare the
+        # model outputs for the next layer; also compute if we
+        # has finished decoding by predicting the end token
+        inputs.ids = tf.concat([inputs.ids, ids], 1)
         inputs.log_probs = tf.reshape(log_probs, [batch_size * beam_size])
         return inputs, tf.logical_or(
-            select_beams(closed), tf.equal(samples[:, 0], 3)), beam_size
+            select_beams(closed), tf.equal(ids[:, 0], 3)), beam_size
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

@@ -105,17 +105,18 @@ def train_faster_rcnn_dataset(tfrecord_folder,
                 R, axis=2, exclusive=True) - tf.math.cumsum(
                     R, axis=2, exclusive=True, reverse=True)
 
-            cap, log_p = greedy_search(inputs,
-                                       model,
-                                       max_iterations=20)
+            cap, log_p = beam_search(inputs,
+                                     model,
+                                     beam_size=3,
+                                     max_iterations=20)
 
-            p = tf.math.exp(log_p)[0]
+            p = tf.math.exp(log_p)[0, 0]
 
             cap = tf.strings.reduce_join(
-                vocab.ids_to_words(cap), axis=1, separator=' ')[0]
+                vocab.ids_to_words(cap)[0, 0], axis=0, separator=' ')
 
             out = tf.strings.reduce_join(
-                vocab.ids_to_words(words), axis=1, separator=' ')[0]
+                vocab.ids_to_words(words)[0], axis=0, separator=' ')
 
             print("[p = {}] Prediction: {}\nGround Truth: {}\n".format(
                 p.numpy(), cap.numpy().decode('utf8'), out.numpy().decode('utf8')))
