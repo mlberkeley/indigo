@@ -6,6 +6,60 @@ import tensorflow as tf
 import os
 
 
+def prepare_batch(batch):
+    """Transform a batch dictionary into a dataclass standard format
+    for the transformer to process
+
+    Arguments:
+
+    batch: dict of tf.Tensors
+        a dictionary that contains tensors from a tfrecord dataset;
+        this function assumes region-features are used
+
+    Returns:
+
+    inputs: TransformerInput
+        the input to be passed into a transformer model with attributes
+        necessary for also computing the loss function"""
+
+    # select all relevant features from the batch dictionary
+    image_ind = batch["image_indicators"]
+    boxes_features = batch["boxes_features"]
+    boxes = batch["boxes"]
+    detections = batch["labels"]
+    words = batch["words"]
+    token_ind = batch["token_indicators"]
+
+    # build a region feature input for the first layer of the model
+    region = RegionFeatureInput(features=boxes_features,
+                                boxes=boxes,
+                                detections=detections)
+
+    # build the inputs to the transformer model by left
+    # shifting the target sequence
+    inputs = TransformerInput(
+        queries=words[:, :-1],
+        values=region,
+        queries_mask=tf.greater(token_ind[:, :-1], 0.),
+        values_mask=tf.greater(image_ind, 0.))
+
+    # this assignment is necessary for the logits loss
+    inputs.ids = words[:, 1:]
+
+    # this assignment correspondws to left-to-right encoding
+    R = tf.eye(tf.shape(words)[1] - 1,
+               batch_shape=tf.shape(words)[:1], dtype=tf.int32)
+
+    # the dataset is non compiled with an encoding so one must
+    # be generated on the fly during training; only
+    # applies when using a pointer layer
+    inputs.positions = tf.math.cumsum(
+        R, axis=2, exclusive=True) - tf.math.cumsum(
+            R, axis=2, exclusive=True, reverse=True)
+
+    return inputs
+
+
 def train_faster_rcnn_dataset(tfrecord_folder,
                               batch_size,
                               num_epoch,
@@ -37,109 +91,71 @@ def train_faster_rcnn_dataset(tfrecord_folder,
 
     # create a training pipeline
     init_lr = 0.001
-    dataset = faster_rcnn_dataset(tfrecord_folder, batch_size)
     optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
+    dataset = faster_rcnn_dataset(tfrecord_folder, batch_size)
 
+    # keras requires the loss is computed using a function
     def loss_function(iteration, batch):
 
-        # select all relevant image features
-        image_indicators = batch["image_indicators"]
-        boxes_features = batch["boxes_features"]
-        boxes = batch["boxes"]
-        detections = batch["labels"]
+        # process the dataset batch dictionary into the standard
+        # model input format
+        inputs = prepare_batch(batch)
+        token_ind = batch['token_indicators']
 
-        # select all relevant language features
-        words = batch["words"]
-        token_indicators = batch["token_indicators"]
-
-        region = RegionFeatureInput(features=boxes_features,
-                                    boxes=boxes,
-                                    detections=detections)
-
-        inputs = TransformerInput(
-            queries=words[:, :-1],
-            values=region,
-            queries_mask=tf.greater(token_indicators[:, :-1], 0.),
-            values_mask=tf.greater(image_indicators, 0.))
-
-        # these labels correspond to left-to-right ordering
-        inputs.ids = words[:, 1:]
-        R = tf.eye(tf.shape(words)[1] - 1,
-                   batch_shape=tf.shape(words)[:1], dtype=tf.int32)
-        inputs.positions = tf.math.cumsum(
-            R, axis=2, exclusive=True) - tf.math.cumsum(
-                R, axis=2, exclusive=True, reverse=True)
-
-        # perform a forward pass using the transformer model
+        # calculate the loss function using the transformer model
         total_loss, _ = model.loss(inputs, training=True)
-
-        total_loss = tf.reduce_sum(
-            total_loss * token_indicators[:, :-1], axis=1)
-        total_loss = total_loss / tf.reduce_sum(
-                token_indicators[:, :-1], axis=1)
-
+        total_loss = tf.reduce_sum(total_loss * token_ind[:, :-1], axis=1)
+        total_loss = total_loss / tf.reduce_sum(token_ind[:, :-1], axis=1)
         total_loss = tf.reduce_mean(total_loss)
+        print('Iteration: {} Loss: {}'.format(iteration, total_loss))
 
-        print('Iteration: {} Loss: {}'.format(iteration,
-                                              total_loss))
-
-        # monitor training by printing the loss
+        # occasionally do some extra processing during training
+        # such as printing the labels and model predictions
         if iteration % 100 == 0:
 
-            region = RegionFeatureInput(features=boxes_features,
-                                        boxes=boxes,
-                                        detections=detections)
+            # process the dataset batch dictionary into the standard
+            # model input format
+            inputs = prepare_batch(batch)
 
-            inputs = TransformerInput(
-                queries=words[:, :-1],
-                values=region,
-                queries_mask=tf.greater(token_indicators[:, :-1], 0.),
-                values_mask=tf.greater(image_indicators, 0.))
-
-            # these labels correspond to left-to-right ordering
-            inputs.ids = words[:, 1:]
-            R = tf.eye(tf.shape(words)[1] - 1,
-                       batch_shape=tf.shape(words)[:1], dtype=tf.int32)
-            inputs.positions = tf.math.cumsum(
-                R, axis=2, exclusive=True) - tf.math.cumsum(
-                    R, axis=2, exclusive=True, reverse=True)
-
-            cap, log_p = beam_search(inputs,
-                                     model,
-                                     beam_size=1,
-                                     max_iterations=20)
-
-            p = tf.math.exp(log_p)[0]
-
-            cap = tf.strings.reduce_join(
-                vocab.ids_to_words(cap)[0], axis=1, separator=' ')
-
+            # show the ground truth sequence from the dataset
             out = tf.strings.reduce_join(
-                vocab.ids_to_words(words)[0], axis=0, separator=' ')
+                vocab.ids_to_words(inputs.ids)[0], axis=0, separator=' ')
+            print("Ground Truth: {}".format(out.numpy().decode('utf8')))
 
-            print("\nGround Truth: {}".format(out.numpy().decode('utf8')))
-            for c, cp in zip(cap, p):
-                print("[p = {}] Prediction: {}".format(
-                    cp.numpy(), c.numpy().decode('utf8')))
-            print()
+            # show several model predicted sequences and their likelihoods
+            cap, log_p = beam_search(
+                inputs, model, beam_size=1, max_iterations=20)
+            cap = tf.strings.reduce_join(
+                vocab.ids_to_words(cap)[0], axis=1, separator=' ').numpy()
+            for c, cp in zip(cap, tf.math.exp(log_p)[0].numpy()):
+                print("[p = {}] Prediction: {}".format(cp, c.decode('utf8')))
 
         return total_loss
 
     # restore an existing model if one exists and create a directory
+    # if the ckpt directory does not exist
     tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
-    if tf.io.gfile.exists(model_ckpt):
+    if tf.io.gfile.exists(model_ckpt + '.index'):
         model.load_weights(model_ckpt)
 
-    # training for a pre specified number of epochs
+    # TODO: Brandon
+    #  do early stopping using a noisy estimate of the BLEU score
+
+    # training for a pre specified number of epochs while also annealing
+    # the learning rate linearly towards zero
     iteration = 0
     for epoch in range(num_epoch):
 
-        # loop through the entire dataset precisely once
+        # loop through the entire dataset once (one epoch)
         for batch in dataset:
 
+            # keras requires the loss be a function
             optim.minimize(lambda: loss_function(iteration, batch),
                            model.trainable_variables)
 
+            # increment the number of training steps so far; note this
+            # does not save with the model and is reset when loading a
+            # pre trained model from the disk
             iteration += 1
 
         # save once at the end of every epoch
