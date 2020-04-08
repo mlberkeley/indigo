@@ -3,7 +3,7 @@ import tensorflow as tf
 
 def greedy_search(inputs,
                   model,
-                  max_iterations=100):
+                  max_iterations=20):
     """Perform a greedy search using a transformer model that
     accepts region features as input
 
@@ -28,29 +28,38 @@ def greedy_search(inputs,
         the log probability of predicted sentences under the
         current transformer model"""
 
+    # meta data to keep track of which beams have completed
+    # during the decoding step
     batch_size = tf.shape(inputs.values_mask)[0]
-    closed_beams = tf.fill([batch_size], False)
+    closed = tf.fill([batch_size], False)
 
-    # create an empty partial sentence and corresponding mask
-    inputs.queries = tf.fill([batch_size, 1], 2)
+    # replace the model inputs with an empty sentence that will be
+    # appended to during the decoding step
+    start = tf.fill([batch_size, 1], 2)
+    inputs.queries = start
     inputs.queries_mask = tf.fill([batch_size, 1], True)
     inputs.ids = tf.fill([batch_size, 0], 2)
     inputs.positions = tf.fill([batch_size, 1, 1], 0)
     inputs.log_probs = tf.zeros([batch_size])
-
     inputs.region = inputs.values
 
     # loop for a maximum of max_iterations decoding steps
     for i in range(max_iterations):
 
         # exit if all beams have finished decoding
-        if tf.reduce_all(closed_beams):
+        if tf.reduce_all(closed):
             break
 
-        # format the inputs for the transformer in the next round
-        inputs, closed_beams = model.greedy_search(inputs, closed_beams)
-        inputs.queries = tf.concat([tf.fill([batch_size, 1], 2), inputs.ids], axis=1)
+        # decode using the model for a single pass
+        inputs, closed = model.greedy_search(inputs, closed)
+
+        # the transformer modifies in place the input data class so
+        # we need to replace the transformer inputs at every
+        # iteration of decoding
+        inputs.queries = tf.concat([start, inputs.ids], axis=1)
         inputs.queries_mask = tf.fill(tf.shape(inputs.queries), True)
         inputs.values = inputs.region
 
+    # unlike beam search we can directly return the result without
+    # calling reshape since there is not an extra axis
     return inputs.ids, inputs.log_probs

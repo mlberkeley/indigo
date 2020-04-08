@@ -32,38 +32,42 @@ def beam_search(inputs,
         the log probability of predicted sentences under the
         current transformer model"""
 
+    # meta data to keep track of which beams have completed
+    # during the decoding step
     batch_size = tf.shape(inputs.values_mask)[0]
-    closed_beams = tf.fill([batch_size], False)
+    closed = tf.fill([batch_size], False)
+    last_beam_size = 1
 
-    # create an empty partial sentence and corresponding mask
+    # replace the model inputs with an empty sentence that will be
+    # appended to during the decoding step
     inputs.queries = tf.fill([batch_size, 1], 2)
     inputs.queries_mask = tf.fill([batch_size, 1], True)
     inputs.ids = tf.fill([batch_size, 0], 2)
     inputs.positions = tf.fill([batch_size, 1, 1], 0)
     inputs.log_probs = tf.zeros([batch_size])
-
     inputs.region = inputs.values
-    last_beam_size = 1
 
     # loop for a maximum of max_iterations decoding steps
     for i in range(max_iterations):
 
         # exit if all beams have finished decoding
-        if tf.reduce_all(closed_beams):
+        if tf.reduce_all(closed):
             break
 
         # format the inputs for the transformer in the next round
-        inputs, closed_beams, last_beam_size = model.beam_search(
-            inputs, closed_beams, last_beam_size, beam_size)
+        inputs, closed, last_beam_size = model.beam_search(
+            inputs, closed, last_beam_size, beam_size)
 
-        inputs.queries = tf.concat([tf.fill([batch_size * last_beam_size, 1], 2), inputs.ids], axis=1)
+        # the transformer modifies in place the input data class so
+        # we need to replace the transformer inputs at every
+        # iteration of decoding
+        start = tf.fill([batch_size * last_beam_size, 1], 2)
+        inputs.queries = tf.concat([start, inputs.ids], axis=1)
         inputs.queries_mask = tf.fill(tf.shape(inputs.queries), True)
         inputs.values = inputs.region
 
     # decoding is finished so un flatten the beam dimension
     # returns a shape like [batch_size, beam_size, sequence_length]
-    queries = tf.stack(tf.split(
-        inputs.ids, beam_size, axis=0), axis=1)
-
+    queries = tf.stack(tf.split(inputs.ids, beam_size, axis=0), axis=1)
     return queries, tf.reshape(
         inputs.log_probs, [batch_size, beam_size])
