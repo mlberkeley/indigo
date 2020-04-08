@@ -107,19 +107,22 @@ def train_faster_rcnn_dataset(tfrecord_folder,
 
             cap, log_p = beam_search(inputs,
                                      model,
-                                     beam_size=3,
+                                     beam_size=1,
                                      max_iterations=20)
 
-            p = tf.math.exp(log_p)[0, 0]
+            p = tf.math.exp(log_p)[0]
 
             cap = tf.strings.reduce_join(
-                vocab.ids_to_words(cap)[0, 0], axis=0, separator=' ')
+                vocab.ids_to_words(cap)[0], axis=1, separator=' ')
 
             out = tf.strings.reduce_join(
                 vocab.ids_to_words(words)[0], axis=0, separator=' ')
 
-            print("[p = {}] Prediction: {}\nGround Truth: {}\n".format(
-                p.numpy(), cap.numpy().decode('utf8'), out.numpy().decode('utf8')))
+            print("\nGround Truth: {}".format(out.numpy().decode('utf8')))
+            for c, cp in zip(cap, p):
+                print("[p = {}] Prediction: {}".format(
+                    cp.numpy(), c.numpy().decode('utf8')))
+            print()
 
         return total_loss
 

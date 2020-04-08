@@ -195,7 +195,7 @@ class Logits(Layer):
         # inputs that correspond to old selected beams
         # this is necessary because future layers may depend on activations
         # that are a function of which beam was selected
-        def select_beams(tensor):
+        def select(tensor):
             return tf.concat(tf.unstack(tf.gather(tf.stack(tf.split(
                 tensor, batch_size, axis=0), axis=0),
                 old_beam_ids, batch_dims=1), axis=0), axis=0)
@@ -213,8 +213,8 @@ class Logits(Layer):
         # select the image features and the transformer hidden activations
         # that correspond to the selected beams after performing
         # a step of beam search
-        map_dataclass(select_beams, inputs)
-        map_dataclass(select_beams, inputs.region)
+        map_dataclass(select, inputs)
+        map_dataclass(select, inputs.region)
 
         # concatenate the sampled tokens to the beam and prepare the
         # model outputs for the next layer; also compute if we
@@ -222,7 +222,7 @@ class Logits(Layer):
         inputs.ids = tf.concat([inputs.ids, ids], 1)
         inputs.log_probs = tf.reshape(log_probs, [batch_size * beam_size])
         return inputs, tf.logical_or(
-            select_beams(closed), tf.equal(ids[:, 0], 3)), beam_size
+            select(closed), tf.equal(ids[:, 0], 3)), beam_size
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
