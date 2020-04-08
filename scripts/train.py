@@ -22,6 +22,12 @@ if __name__ == "__main__":
         '--embedding_size', type=int, default=256)
     parser.add_argument(
         '--num_layers', type=int, default=1)
+    parser.add_argument(
+        '--first_layer', type=str,
+        default='region', choices=['region', 'discrete', 'continuous'])
+    parser.add_argument(
+        '--final_layer', type=str,
+        default='indigo', choices=['indigo', 'logits'])
     args = parser.parse_args()
 
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:
@@ -36,8 +42,8 @@ if __name__ == "__main__":
                         queries_dropout=0.,
                         values_dropout=0.,
                         causal=True,
-                        first_layer='region',
-                        final_layer='indigo')
+                        first_layer=args.first_layer,
+                        final_layer=args.final_layer)
 
     train_faster_rcnn_dataset(args.tfrecord_folder,
                               args.batch_size,
