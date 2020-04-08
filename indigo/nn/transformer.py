@@ -1,4 +1,4 @@
-from indigo.nn.engine.sequential import Sequential
+from indigo.nn.wrappers.sequential import Sequential
 from indigo.nn.layers.encoder_layer import EncoderLayer
 from indigo.nn.layers.decoder_layer import DecoderLayer
 from indigo.nn.features.discrete_feature import DiscreteFeature

@@ -1,4 +1,4 @@
-from indigo.nn.engine.layer import Layer
+from indigo.nn.wrappers.layer import Layer
 from indigo.nn.base.block import Block
 from indigo.nn.base.attention import causal_mask
 import tensorflow as tf

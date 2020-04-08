@@ -1,6 +1,6 @@
 from indigo.data.load import faster_rcnn_dataset
-from indigo.input import TransformerInput
-from indigo.input import RegionFeatureInput
+from indigo.nn.input import TransformerInput
+from indigo.nn.input import RegionFeatureInput
 import tensorflow as tf
 import os
 

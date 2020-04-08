@@ -1,7 +1,7 @@
-from indigo.nn.engine.layer import Layer
+from indigo.nn.wrappers.layer import Layer
 from indigo.nn.base.block import Block
 from indigo.nn.base.attention import Attention
-from indigo.input import AttentionInput
+from indigo.nn.input import AttentionInput
 import tensorflow as tf
 
 

@@ -1,4 +1,4 @@
-from indigo.nn.engine.layer import Layer
+from indigo.nn.wrappers.layer import Layer
 import tensorflow as tf
 import tree
 

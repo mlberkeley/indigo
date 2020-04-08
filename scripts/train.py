@@ -1,5 +1,5 @@
 from indigo.core.train import train_faster_rcnn_dataset
-from indigo.nn.models.transformer import Transformer
+from indigo.nn.transformer import Transformer
 from indigo.process.captions import Vocabulary
 import tensorflow as tf
 import argparse
@@ -37,7 +37,7 @@ if __name__ == "__main__":
                         values_dropout=0.,
                         causal=True,
                         first_layer='region',
-                        final_layer='logits')
+                        final_layer='indigo')
 
     train_faster_rcnn_dataset(args.tfrecord_folder,
                               args.batch_size,
