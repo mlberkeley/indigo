@@ -63,9 +63,6 @@ def validate_faster_rcnn_dataset(tfrecord_folder,
     batch_size: int
         the maximum number of training examples in a
         single batch
-    num_epochs: int
-        the number of loops through the entire dataset to
-        make before termination
     model: Decoder
         the caption model to be trained
     model_ckpt: str
