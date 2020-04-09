@@ -30,6 +30,14 @@ def prepare_batch(batch):
     words = batch["words"]
     token_ind = batch["token_indicators"]
 
+    # this assignment corresponds to left-to-right encoding; note that
+    # the end token must ALWAYS be decoded last and also the start
+    # token must ALWAYS be decoded first
+    permutation = tf.eye(tf.shape(words)[1],
+                         batch_shape=tf.shape(words)[:1], dtype=tf.int32)
+    words = tf.squeeze(
+        tf.matmul(tf.expand_dims(words, 1), permutation), 1)
+
     # build a region feature input for the first layer of the model
     region = RegionFeatureInput(features=boxes_features,
                                 boxes=boxes,
@@ -46,16 +54,14 @@ def prepare_batch(batch):
     # this assignment is necessary for the logits loss
     inputs.ids = words[:, 1:]
 
-    # this assignment correspondws to left-to-right encoding
-    R = tf.eye(tf.shape(words)[1] - 1,
-               batch_shape=tf.shape(words)[:1], dtype=tf.int32)
-
-    # the dataset is non compiled with an encoding so one must
+    # the dataset is not compiled with an encoding so one must
     # be generated on the fly during training; only
-    # applies when using a pointer layer
+    # applies when using a pointer layer; note that we remove the final
+    # row and column which corresponds to the end token
+    inp = permutation[:, :-1, :-1]
     inputs.positions = tf.math.cumsum(
-        R, axis=2, exclusive=True) - tf.math.cumsum(
-            R, axis=2, exclusive=True, reverse=True)
+        inp, axis=2, exclusive=True) - tf.math.cumsum(
+            inp, axis=2, exclusive=True, reverse=True)
 
     return inputs
 
