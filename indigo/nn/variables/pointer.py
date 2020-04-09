@@ -147,7 +147,7 @@ class Pointer(Layer):
         # compute the relative position update vector using the samples ids
         # this equals -1 if ids are to the left and +1 if to the right
         r = tf.gather(inputs.positions, ids, batch_dims=1)
-        r = tf.squeeze(tf.where(tf.equal(r, 0), tf.ones_like(r), r), axis=1)
+        r = tf.squeeze(tf.where(tf.equal(r, 0), -tf.ones_like(r), r), axis=1)
 
         # concatenate the relative position vector to the left and to the
         # bottom of the relative position matrix; see the paper
@@ -270,7 +270,7 @@ class Pointer(Layer):
         # this equals -1 if ids are to the left and +1 if to the right
         positions = select(inputs.positions)
         r = tf.gather(positions, ids, batch_dims=1)
-        r = tf.squeeze(tf.where(tf.equal(r, 0), tf.ones_like(r), r), axis=1)
+        r = tf.squeeze(tf.where(tf.equal(r, 0), -tf.ones_like(r), r), axis=1)
 
         # concatenate the relative position vector to the left and to the
         # bottom of the relative position matrix; see the paper

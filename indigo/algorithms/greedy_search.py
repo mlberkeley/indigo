@@ -60,6 +60,15 @@ def greedy_search(inputs,
         inputs.queries_mask = tf.fill(tf.shape(inputs.queries), True)
         inputs.values = inputs.region
 
+    # when the model decodes permutation matrices in additions to ids;
+    # then sort ids according to the decoded permutation
+    if model.final_layer == 'indigo':
+        pos = inputs.positions[:, 1:, 1:]
+        pos = tf.reduce_sum(tf.nn.relu(pos), axis=1)
+        pos = tf.one_hot(pos, tf.shape(pos)[1], dtype=tf.int32)
+        inputs.ids = tf.squeeze(
+            tf.matmul(tf.expand_dims(inputs.ids, 1), pos), 1)
+
     # unlike beam search we can directly return the result without
     # calling reshape since there is not an extra axis
     return inputs.ids, inputs.log_probs

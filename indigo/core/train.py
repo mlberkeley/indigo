@@ -169,7 +169,7 @@ def train_faster_rcnn_dataset(train_folder,
             iteration += 1
 
         # anneal the model learning rate after an epoch
-        optim.lr.assign(init_lr * (1 - epoch / num_epoch))
+        optim.lr.assign(init_lr * (1 - (epoch + 1) / num_epoch))
 
         # keep track of the validation loss
         validation_loss = 0.0
