@@ -2,7 +2,7 @@
 
 Implements Transformer-InDIGO in TF 2: https://arxiv.org/abs/1905.12790
 
-How effective is the monolithic left-to-right decoding strategy employed by modern language modeling systems, and what are the alternatives? In this project, we explore the viability of non-sequential and partially-autoregressive language models. This package is our research framework. Have Fun! -Brandon
+How effective is the monolithic left-to-right decoding strategy employed by modern language modeling systems, and what are the alternatives? In this project, we explore the viability and implications of non-sequential and partially-autoregressive language models. This package is our research framework. Have Fun! -Brandon
 
 ## Installation
 
@@ -60,19 +60,15 @@ python scripts/process_captions.py \
     --out_feature_folder ~/captions_train2017_features \
     --in_folder ~/captions_train2017 \
     --tagger_file tagger.pkl \
-    --ordering left_to_right \
     --vocab_file train2017_vocab.txt \
     --min_word_frequency 5 \
-    --max_length 100 \
-    --max_violations 0
+    --max_length 100
 python scripts/process_captions.py \
     --out_feature_folder ~/captions_val2017_features \
     --in_folder ~/captions_val2017 \
     --tagger_file tagger.pkl \
-    --ordering left_to_right \
     --vocab_file train2017_vocab.txt \
-    --max_length 100 \
-    --max_violations 0
+    --max_length 100
 ```
 
 Process images from the COCO 2017 dataset and extract features using a Faster RCNN FPN backbone. Note this script will distribute inference across all visible GPUs on your system.
