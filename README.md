@@ -1,7 +1,7 @@
 # indigo
 Implements Transformer-InDIGO in TF 2: https://arxiv.org/abs/1905.12790
 
-How effective is the monolithic left-to-right decoding strategy employed by modern language modeling systems, and what are the alternatives? In this project, we explore the implications and viability of non-sequential decoding strategies in language modeling systems. This package is our research framework. Have Fun! -Brandon
+How effective is the monolithic left-to-right decoding strategy employed by modern language modeling systems, and what are the alternatives? In this project, we explore the viability of non-sequential autoregressive models. This package is our research framework. Have Fun! -Brandon
 
 ## Installation
 
