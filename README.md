@@ -10,7 +10,7 @@ To install this package, first download the package from github, then install it
 
 ```bash
 git clone git@github.com:brandontrabucco/indigo.git
-pip install -e nsds
+pip install -e indigo
 ```
 
 You must then install helper packages for word tokenization and part of speech tagging. Enter the following statements into the python interpreter where you have installed our package.
