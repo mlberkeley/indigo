@@ -2,6 +2,7 @@ from indigo.data.load import faster_rcnn_dataset
 from indigo.nn.input import TransformerInput
 from indigo.nn.input import RegionFeatureInput
 from indigo.algorithms.beam_search import beam_search
+from nlgeval import NLGEval
 import tensorflow as tf
 import os
 
@@ -27,8 +28,6 @@ def prepare_batch(batch):
     boxes_features = batch["boxes_features"]
     boxes = batch["boxes"]
     detections = batch["labels"]
-    words = batch["words"]
-    token_ind = batch["token_indicators"]
 
     # build a region feature input for the first layer of the model
     region = RegionFeatureInput(features=boxes_features,
@@ -38,34 +37,18 @@ def prepare_batch(batch):
     # build the inputs to the transformer model by left
     # shifting the target sequence
     inputs = TransformerInput(
-        queries=words[:, :-1],
         values=region,
-        queries_mask=tf.greater(token_ind[:, :-1], 0.),
         values_mask=tf.greater(image_ind, 0.))
-
-    # this assignment is necessary for the logits loss
-    inputs.ids = words[:, 1:]
-
-    # this assignment correspondws to left-to-right encoding
-    R = tf.eye(tf.shape(words)[1] - 1,
-               batch_shape=tf.shape(words)[:1], dtype=tf.int32)
-
-    # the dataset is non compiled with an encoding so one must
-    # be generated on the fly during training; only
-    # applies when using a pointer layer
-    inputs.positions = tf.math.cumsum(
-        R, axis=2, exclusive=True) - tf.math.cumsum(
-            R, axis=2, exclusive=True, reverse=True)
 
     return inputs
 
 
-def train_faster_rcnn_dataset(tfrecord_folder,
-                              batch_size,
-                              num_epoch,
-                              model,
-                              model_ckpt,
-                              vocab):
+def validate_faster_rcnn_dataset(tfrecord_folder,
+                                 ref_folder,
+                                 batch_size,
+                                 model,
+                                 model_ckpt,
+                                 vocab):
     """Trains a transformer based caption model using features extracted
     using a facter rcnn object detection model
 
@@ -73,6 +56,9 @@ def train_faster_rcnn_dataset(tfrecord_folder,
 
     tfrecord_folder: str
         the path to a folder that contains tfrecord files
+        ready to be loaded from the disk
+    ref_folder: str
+        the path to a folder that contains ground truth sentence files
         ready to be loaded from the disk
     batch_size: int
         the maximum number of training examples in a
@@ -89,77 +75,47 @@ def train_faster_rcnn_dataset(tfrecord_folder,
         the model vocabulary which contains mappings
         from words to integers"""
 
-    # create a training pipeline
-    init_lr = 0.001
-    optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
+    # create a validation pipeline
     dataset = faster_rcnn_dataset(tfrecord_folder, batch_size)
+    model.load_weights(model_ckpt)
 
-    # keras requires the loss is computed using a function
-    def loss_function(iteration, batch):
+    nlgeval = NLGEval()
+    ref_caps = {}
+    hyp_caps = {}
+
+    # loop through the entire dataset once (one epoch)
+    for batch in dataset:
+
+        # for every element of the batch select the path that
+        # corresponds to ground truth words
+        paths = [x.decode("utf-8") for x in batch["image_path"].numpy()]
+        paths = [os.path.join(ref_folder,  os.path.basename(x)[:-7] + "txt")
+                 for x in paths]
+
+        # iterate through every ground truth training example and
+        # select each row from the text file
+        for file_path in paths:
+            with tf.io.gfile.GFile(file_path, "r") as f:
+                ref_caps[file_path] = [
+                    x for x in f.read().strip().lower().split("\n")
+                    if len(x) > 0]
 
         # process the dataset batch dictionary into the standard
-        # model input format
-        inputs = prepare_batch(batch)
-        token_ind = batch['token_indicators']
+        # model input format; perform beam search
+        cap, log_p = beam_search(
+            prepare_batch(batch), model, beam_size=3, max_iterations=20)
+        cap = tf.strings.reduce_join(
+            vocab.ids_to_words(cap), axis=2, separator=' ').numpy()
 
-        # calculate the loss function using the transformer model
-        total_loss, _ = model.loss(inputs, training=True)
-        total_loss = tf.reduce_sum(total_loss * token_ind[:, :-1], axis=1)
-        total_loss = total_loss / tf.reduce_sum(token_ind[:, :-1], axis=1)
-        total_loss = tf.reduce_mean(total_loss)
-        print('Iteration: {} Loss: {}'.format(iteration, total_loss))
+        # format the model predictions into a string; the evaluation package
+        # requires input to be strings; not there will be slight
+        # formatting differences between ref and hyp
+        for i in range(cap.shape[0]):
+            hyp_caps[paths[i]] = cap[i, 0].numpy().decode("utf-8").replace(
+                "<pad>", "").replace("<start>", "").replace(
+                "<end>", "").replace("  ", " ").strip()
 
-        # occasionally do some extra processing during training
-        # such as printing the labels and model predictions
-        if iteration % 100 == 0:
-
-            # process the dataset batch dictionary into the standard
-            # model input format
-            inputs = prepare_batch(batch)
-
-            # show the ground truth sequence from the dataset
-            out = tf.strings.reduce_join(
-                vocab.ids_to_words(inputs.ids)[0], axis=0, separator=' ')
-            print("Ground Truth: {}".format(out.numpy().decode('utf8')))
-
-            # show several model predicted sequences and their likelihoods
-            cap, log_p = beam_search(
-                inputs, model, beam_size=1, max_iterations=20)
-            cap = tf.strings.reduce_join(
-                vocab.ids_to_words(cap)[0], axis=1, separator=' ').numpy()
-            for c, cp in zip(cap, tf.math.exp(log_p)[0].numpy()):
-                print("[p = {}] Prediction: {}".format(cp, c.decode('utf8')))
-
-        return total_loss
-
-    # restore an existing model if one exists and create a directory
-    # if the ckpt directory does not exist
-    tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
-    if tf.io.gfile.exists(model_ckpt + '.index'):
-        model.load_weights(model_ckpt)
-
-    # TODO: Brandon
-    #  do early stopping using a noisy estimate of the BLEU score
-
-    # training for a pre specified number of epochs while also annealing
-    # the learning rate linearly towards zero
-    iteration = 0
-    for epoch in range(num_epoch):
-
-        # loop through the entire dataset once (one epoch)
-        for batch in dataset:
-
-            # keras requires the loss be a function
-            optim.minimize(lambda: loss_function(iteration, batch),
-                           model.trainable_variables)
-
-            # increment the number of training steps so far; note this
-            # does not save with the model and is reset when loading a
-            # pre trained model from the disk
-            iteration += 1
-
-        # save once at the end of every epoch
-        model.save_weights(model_ckpt, save_format='tf')
-
-        # anneal the model learning rate after an epoch
-        optim.lr.assign(init_lr * (1 - epoch / num_epoch))
+    # compute several natural language generation metrics
+    metrics = nlgeval.compute_metrics([*zip(*ref_caps)], hyp_caps)
+    for key in metrics.keys():
+        print("Eval/{}".format(key), metrics[key])
