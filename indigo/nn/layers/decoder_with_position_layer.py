@@ -53,7 +53,7 @@ class DecoderWithPositionLayer(Layer):
                             input_size,
                             **kwargs)
         self.pos_embedding = tf.keras.layers.Embedding(
-            3, hidden_size * heads, **kwargs)
+            3, hidden_size, **kwargs)
 
         # the core attention and processing variables
         self.attention1 = Attention(
@@ -109,10 +109,10 @@ class DecoderWithPositionLayer(Layer):
         # add a position-conditioned bias to the attention scores
         # in log-space: https://arxiv.org/pdf/1902.01370.pdf
         keys = tf.concat(tf.split(keys, self.heads, axis=2), axis=0)
-        pos = self.pos_embedding(inputs.positions, **kwargs)
-        pos = tf.concat(tf.split(pos, self.heads, axis=2), axis=0)
-        attention_input.bias = tf.matmul(
-            tf.expand_dims(keys, axis=2), pos, transpose_b=True)
+        pos = self.pos_embedding(inputs.positions + 1, **kwargs)
+        pos = tf.concat(tf.split(pos, self.heads, axis=3), axis=0)
+        attention_input.bias = tf.squeeze(tf.matmul(
+            tf.expand_dims(keys, 2), pos, transpose_b=True), 2)
 
         y = self.attention0(attention_input, **kwargs)
         y = self.block1(y, **kwargs)

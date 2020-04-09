@@ -1,6 +1,7 @@
 from indigo.nn.wrappers.sequential import Sequential
 from indigo.nn.layers.encoder_layer import EncoderLayer
 from indigo.nn.layers.decoder_layer import DecoderLayer
+from indigo.nn.layers.decoder_with_position_layer import DecoderWithPositionLayer
 from indigo.nn.features.discrete_feature import DiscreteFeature
 from indigo.nn.features.continuous_feature import ContinuousFeature
 from indigo.nn.features.region_feature import RegionFeature
@@ -78,7 +79,9 @@ class Transformer(Sequential):
             hidden_size, hidden_size // 2, heads,
             queries_dropout=queries_dropout, values_dropout=values_dropout,
             causal=False, **kwargs) for _ in range(num_layers)])
-        layers.extend([DecoderLayer(
+        cls = (DecoderWithPositionLayer
+               if final_layer == 'indigo' else DecoderLayer)
+        layers.extend([cls(
             hidden_size, hidden_size // 2, heads,
             queries_dropout=queries_dropout, values_dropout=values_dropout,
             causal=causal, **kwargs) for _ in range(num_layers)])
