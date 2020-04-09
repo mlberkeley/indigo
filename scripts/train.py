@@ -9,9 +9,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--tfrecord_folder', type=str, default='tfrecord')
+        '--train_folder', type=str, default='tfrecord')
     parser.add_argument(
-        '--batch_size', type=int, default=128)
+        '--validate_folder', type=str, default='tfrecord')
+    parser.add_argument(
+        '--batch_size', type=int, default=5)
     parser.add_argument(
         '--vocab_file', type=str, default='vocab.txt')
     parser.add_argument(
@@ -45,7 +47,8 @@ if __name__ == "__main__":
                         first_layer=args.first_layer,
                         final_layer=args.final_layer)
 
-    train_faster_rcnn_dataset(args.tfrecord_folder,
+    train_faster_rcnn_dataset(args.train_folder,
+                              args.validate_folder,
                               args.batch_size,
                               args.num_epochs,
                               model,

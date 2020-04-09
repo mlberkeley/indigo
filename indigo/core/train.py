@@ -60,7 +60,8 @@ def prepare_batch(batch):
     return inputs
 
 
-def train_faster_rcnn_dataset(tfrecord_folder,
+def train_faster_rcnn_dataset(train_folder,
+                              validate_folder,
                               batch_size,
                               num_epoch,
                               model,
@@ -71,9 +72,14 @@ def train_faster_rcnn_dataset(tfrecord_folder,
 
     Arguments:
 
-    tfrecord_folder: str
+    train_folder: str
         the path to a folder that contains tfrecord files
-        ready to be loaded from the disk
+        ready to be loaded from the disk;
+        used for training
+    validate_folder: str
+        the path to a folder that contains tfrecord files
+        ready to be loaded from the disk;
+        used for validation
     batch_size: int
         the maximum number of training examples in a
         single batch
@@ -92,10 +98,11 @@ def train_faster_rcnn_dataset(tfrecord_folder,
     # create a training pipeline
     init_lr = 0.001
     optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
-    dataset = faster_rcnn_dataset(tfrecord_folder, batch_size)
+    train_dataset = faster_rcnn_dataset(train_folder, batch_size)
+    validate_dataset = faster_rcnn_dataset(validate_folder, batch_size)
 
     # keras requires the loss is computed using a function
-    def loss_function(iteration, batch):
+    def loss_function(iteration, batch, decode=False, verbose=False):
 
         # process the dataset batch dictionary into the standard
         # model input format
@@ -107,11 +114,12 @@ def train_faster_rcnn_dataset(tfrecord_folder,
         total_loss = tf.reduce_sum(total_loss * token_ind[:, :-1], axis=1)
         total_loss = total_loss / tf.reduce_sum(token_ind[:, :-1], axis=1)
         total_loss = tf.reduce_mean(total_loss)
-        print('Iteration: {} Loss: {}'.format(iteration, total_loss))
+        if verbose:
+            print('It: {} Train Loss: {}'.format(iteration, total_loss))
 
         # occasionally do some extra processing during training
         # such as printing the labels and model predictions
-        if iteration % 100 == 0:
+        if decode:
 
             # process the dataset batch dictionary into the standard
             # model input format
@@ -140,6 +148,7 @@ def train_faster_rcnn_dataset(tfrecord_folder,
 
     # TODO: Brandon
     #  do early stopping using a noisy estimate of the BLEU score
+    best_loss = 999999.0
 
     # training for a pre specified number of epochs while also annealing
     # the learning rate linearly towards zero
@@ -147,10 +156,11 @@ def train_faster_rcnn_dataset(tfrecord_folder,
     for epoch in range(num_epoch):
 
         # loop through the entire dataset once (one epoch)
-        for batch in dataset:
+        for batch in train_dataset:
 
             # keras requires the loss be a function
-            optim.minimize(lambda: loss_function(iteration, batch),
+            optim.minimize(lambda: loss_function(
+                iteration, batch, decode=iteration % 100 == 0, verbose=True),
                            model.trainable_variables)
 
             # increment the number of training steps so far; note this
@@ -158,8 +168,28 @@ def train_faster_rcnn_dataset(tfrecord_folder,
             # pre trained model from the disk
             iteration += 1
 
-        # save once at the end of every epoch
-        model.save_weights(model_ckpt, save_format='tf')
-
         # anneal the model learning rate after an epoch
         optim.lr.assign(init_lr * (1 - epoch / num_epoch))
+
+        # keep track of the validation loss
+        validation_loss = 0.0
+        denom = 0.0
+
+        # loop through the entire dataset once (one epoch)
+        for batch in validate_dataset:
+
+            # accumulate the validation loss across the entire dataset
+            n = tf.cast(tf.shape(batch['words'])[0], tf.float32)
+            validation_loss += loss_function(
+                iteration, batch, decode=False, verbose=False) * n
+            denom += n
+
+        # normalize the validation loss per validation example
+        validation_loss = validation_loss / denom
+        print('It: {} Val Loss: {}'.format(iteration, validation_loss))
+
+        # save once at the end of every epoch; btu only save when
+        # the validation loss becomes smaller
+        if best_loss > validation_loss:
+            best_loss = validation_loss
+            model.save_weights(model_ckpt, save_format='tf')
