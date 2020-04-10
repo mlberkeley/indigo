@@ -1,6 +1,6 @@
 # Transformer-InDIGO
 
-Implements Transformer-InDIGO in TF 2: https://arxiv.org/abs/1905.12790
+(Unofficialy) Implements Transformer-InDIGO in TF 2: https://arxiv.org/abs/1905.12790
 
 How effective is the monolithic left-to-right decoding strategy employed by modern language modeling systems, and what are the alternatives? In this project, we explore the viability and implications of non-sequential and partially-autoregressive language models. This package is our research framework. Have Fun! -Brandon
 
