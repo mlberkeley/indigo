@@ -17,8 +17,6 @@ if __name__ == "__main__":
         '--max_length', type=int, default=20)
     parser.add_argument(
         '--min_word_frequency', type=int, default=5)
-    parser.add_argument(
-        '--max_violations', type=int, default=0)
     args = parser.parse_args()
 
     process_captions(args.out_feature_folder,
