@@ -46,6 +46,7 @@ def prepare_batch(batch):
 def validate_faster_rcnn_dataset(tfrecord_folder,
                                  ref_folder,
                                  batch_size,
+                                 beam_size,
                                  model,
                                  model_ckpt,
                                  vocab):
@@ -62,6 +63,9 @@ def validate_faster_rcnn_dataset(tfrecord_folder,
         ready to be loaded from the disk
     batch_size: int
         the maximum number of training examples in a
+        single batch
+    beam_size: int
+        the maximum number of beams to use when decoding in a
         single batch
     model: Decoder
         the caption model to be trained
@@ -100,7 +104,7 @@ def validate_faster_rcnn_dataset(tfrecord_folder,
         # process the dataset batch dictionary into the standard
         # model input format; perform beam search
         cap, log_p = beam_search(
-            prepare_batch(batch), model, beam_size=1, max_iterations=20)
+            prepare_batch(batch), model, beam_size=beam_size, max_iterations=20)
         cap = tf.strings.reduce_join(
             vocab.ids_to_words(cap), axis=2, separator=' ').numpy()
 

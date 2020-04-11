@@ -1,7 +1,11 @@
+import tensorflow as tf
+for gpu in tf.config.experimental.list_physical_devices('GPU'):
+    tf.config.experimental.set_memory_growth(gpu, True)
+
+
 from indigo.core.validate import validate_faster_rcnn_dataset
 from indigo.nn.transformer import Transformer
 from indigo.process.captions import Vocabulary
-import tensorflow as tf
 import argparse
 
 
@@ -13,7 +17,9 @@ if __name__ == "__main__":
     parser.add_argument(
         '--ref_folder', type=str, default='captions')
     parser.add_argument(
-        '--batch_size', type=int, default=5)
+        '--batch_size', type=int, default=3)
+    parser.add_argument(
+        '--beam_size', type=int, default=12)
     parser.add_argument(
         '--vocab_file', type=str, default='vocab.txt')
     parser.add_argument(
@@ -21,7 +27,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--embedding_size', type=int, default=256)
     parser.add_argument(
-        '--num_layers', type=int, default=1)
+        '--num_layers', type=int, default=2)
     parser.add_argument(
         '--first_layer', type=str,
         default='region', choices=['region', 'discrete', 'continuous'])
@@ -48,6 +54,7 @@ if __name__ == "__main__":
     validate_faster_rcnn_dataset(args.validate_folder,
                                  args.ref_folder,
                                  args.batch_size,
+                                 args.beam_size,
                                  model,
                                  args.model_ckpt,
                                  vocab)
