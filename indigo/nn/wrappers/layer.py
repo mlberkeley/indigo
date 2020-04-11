@@ -24,7 +24,7 @@ class Layer(tf.keras.layers.Layer):
             a dataclass that manages inputs and outputs for layers variables
             is mutable and will be mutated by this layer"""
 
-        return 0.0, self.call(inputs, **kwargs)
+        return tf.zeros([]), self.call(inputs, **kwargs)
 
     def greedy_search(self,
                       inputs,

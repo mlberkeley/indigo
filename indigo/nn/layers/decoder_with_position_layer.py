@@ -12,6 +12,7 @@ class DecoderWithPositionLayer(Layer):
                  hidden_size,
                  heads,
                  queries_dropout=0.,
+                 keys_dropout=0.,
                  values_dropout=0.,
                  causal=True,
                  **kwargs):
@@ -32,6 +33,9 @@ class DecoderWithPositionLayer(Layer):
         queries_dropout: float
             the ratio of units to drop during training to the
             number of units in each attention layer
+        keys_dropout: float
+            the ratio of units to drop during training to the
+            number of units in each attention layer
         values_dropout: float
             the ratio of units to drop during training to the
             number of units in each attention layer
@@ -42,8 +46,8 @@ class DecoderWithPositionLayer(Layer):
 
         # the core attention and processing variables
         self.attention0 = Attention(
-            heads,
             queries_dropout=queries_dropout,
+            keys_dropout=keys_dropout,
             values_dropout=values_dropout,
             causal=causal)
         self.block0 = Block(hidden_size // 2,
@@ -57,8 +61,8 @@ class DecoderWithPositionLayer(Layer):
 
         # the core attention and processing variables
         self.attention1 = Attention(
-            heads,
             queries_dropout=queries_dropout,
+            keys_dropout=keys_dropout,
             values_dropout=values_dropout,
             causal=False)
         self.block2 = Block(hidden_size // 2,
@@ -77,6 +81,7 @@ class DecoderWithPositionLayer(Layer):
         self.hidden_size = hidden_size
         self.heads = heads
         self.queries_dropout = queries_dropout
+        self.keys_dropout = keys_dropout
         self.values_dropout = values_dropout
         self.causal = causal
         self.kwargs = kwargs
@@ -97,40 +102,79 @@ class DecoderWithPositionLayer(Layer):
             the result of applying a multi head attention mechanism
             same shape as inputs"""
 
+        # calculate the shape of the values tensor before performing attention
+        # used when separating the heads from channels
+        s0 = tf.shape(inputs.queries)
+        s1 = tf.shape(inputs.values)
+        hidden_dim = self.hidden_size // self.heads
+
+        # pass the input through a feed forward processing block and
+        # separate heads from channels
         activations = self.block0(inputs.queries, **kwargs)
-        queries, keys, values = tf.split(activations, 3, axis=2)
-        attention_input = AttentionInput(
-            queries=queries,
-            keys=keys,
-            values=values,
-            queries_mask=inputs.queries_mask,
-            values_mask=inputs.queries_mask)
+        activations = tf.transpose(tf.reshape(activations, [
+            s0[0], s0[1], self.heads, hidden_dim * 3]), [0, 2, 1, 3])
+
+        # convert the inputs into the standard data class format expected
+        # by the attention class
+        queries_mask = tf.expand_dims(inputs.queries_mask, 1)
+        att_input = AttentionInput(
+            queries=activations[..., :hidden_dim],
+            keys=activations[..., hidden_dim:2 * hidden_dim],
+            values=activations[..., 2 * hidden_dim:],
+            queries_mask=queries_mask,
+            values_mask=queries_mask)
 
         # add a position-conditioned bias to the attention scores
         # in log-space: https://arxiv.org/pdf/1902.01370.pdf
-        keys = tf.concat(tf.split(keys, self.heads, axis=2), axis=0)
         pos = self.pos_embedding(inputs.positions + 1, **kwargs)
-        pos = tf.concat(tf.split(pos, self.heads, axis=3), axis=0)
-        attention_input.bias = tf.squeeze(tf.matmul(
-            tf.expand_dims(keys, 2), pos, transpose_b=True), 2)
+        pos = tf.transpose(tf.reshape(pos, [
+            s0[0], s0[1], s0[1], self.heads, hidden_dim]), [0, 3, 1, 2, 4])
+        att_input.bias = tf.squeeze(tf.matmul(
+            tf.expand_dims(att_input.keys, 3), pos, transpose_b=True), 3)
 
-        y = self.attention0(attention_input, **kwargs)
-        y = self.block1(y, **kwargs)
-        inputs.queries = inputs.queries + y
-        queries = self.block2(inputs.queries, **kwargs)
-        keys, values = tf.split(
-            self.block3(inputs.values, **kwargs), 2, axis=2)
+        # pass the input through an attention processing block and
+        # flatten the heads and channels
+        activations = self.attention0(att_input, **kwargs)
+        activations = tf.reshape(tf.transpose(activations, [
+            0, 2, 1, 3]), [s0[0], s0[1], self.heads * hidden_dim])
 
-        attention_input = AttentionInput(
+        # pass the outputs of the attention through another feed forward
+        # processing block a residual connection
+        activations = self.block1(activations, **kwargs)
+        inputs.queries = inputs.queries + activations
+
+        # pass the input through a feed forward processing block and
+        # separate heads from channels
+        activations = self.block2(inputs.queries, **kwargs)
+        queries = tf.transpose(tf.reshape(activations, [
+            s0[0], s0[1], self.heads, hidden_dim]), [0, 2, 1, 3])
+
+        # pass the input through a feed forward processing block and
+        # separate heads from channels
+        activations = self.block3(inputs.values, **kwargs)
+        activations = tf.transpose(tf.reshape(activations, [
+            s1[0], s1[1], self.heads, hidden_dim * 2]), [0, 2, 1, 3])
+
+        # convert the inputs into the standard data class format expected
+        # by the attention class
+        values_mask = tf.expand_dims(inputs.values_mask, 1)
+        att_input = AttentionInput(
             queries=queries,
-            keys=keys,
-            values=values,
-            queries_mask=inputs.queries_mask,
-            values_mask=inputs.values_mask)
+            keys=activations[..., :hidden_dim],
+            values=activations[..., hidden_dim:],
+            queries_mask=queries_mask,
+            values_mask=values_mask)
 
-        y = self.attention1(attention_input, **kwargs)
-        y = self.block4(y, **kwargs)
-        inputs.queries = inputs.queries + y
+        # pass the input through an attention processing block and
+        # flatten the heads and channels
+        activations = self.attention1(att_input, **kwargs)
+        activations = tf.reshape(tf.transpose(activations, [
+            0, 2, 1, 3]), [s0[0], s0[1], self.heads * hidden_dim])
+
+        # pass the outputs of the attention through another feed forward
+        # processing block a residual connection
+        activations = self.block4(activations, **kwargs)
+        inputs.queries = inputs.queries + activations
         return inputs
 
     def get_config(self):
@@ -148,6 +192,7 @@ class DecoderWithPositionLayer(Layer):
                       hidden_size=self.hidden_size,
                       heads=self.heads,
                       queries_dropout=self.queries_dropout,
+                      keys_dropout=self.keys_dropout,
                       values_dropout=self.values_dropout,
                       causal=self.causal,
                       ** self.kwargs)

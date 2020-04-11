@@ -68,7 +68,8 @@ def validate_faster_rcnn_dataset(tfrecord_folder,
         the maximum number of beams to use when decoding in a
         single batch
     model: Decoder
-        the caption model to be trained
+        the caption model to be validated; an instance of Transformer that
+        returns a data class TransformerInput
     model_ckpt: str
         the path to an existing model checkpoint or the path
         to be written to when training

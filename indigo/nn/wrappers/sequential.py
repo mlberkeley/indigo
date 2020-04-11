@@ -24,7 +24,7 @@ class Sequential(tf.keras.Sequential):
             a dataclass that manages inputs and outputs for layers variables
             is mutable and will be mutated by this layer"""
 
-        total_loss = 0.0
+        total_loss = tf.zeros([])
         for layer in self.layers:
             loss, inputs = layer.loss(inputs, **kwargs)
             total_loss = total_loss + loss

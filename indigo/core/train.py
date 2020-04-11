@@ -93,7 +93,8 @@ def train_faster_rcnn_dataset(train_folder,
         the number of loops through the entire dataset to
         make before termination
     model: Decoder
-        the caption model to be trained
+        the caption model to be trained; an instance of Transformer that
+        returns a data class TransformerInput
     model_ckpt: str
         the path to an existing model checkpoint or the path
         to be written to when training
@@ -107,13 +108,12 @@ def train_faster_rcnn_dataset(train_folder,
     train_dataset = faster_rcnn_dataset(train_folder, batch_size)
     validate_dataset = faster_rcnn_dataset(validate_folder, batch_size)
 
-    # keras requires the loss is computed using a function
-    def loss_function(iteration, batch, decode=False, verbose=False):
+    def loss_function(it, b, decode=False, verbose=False):
 
         # process the dataset batch dictionary into the standard
         # model input format
-        inputs = prepare_batch(batch)
-        token_ind = batch['token_indicators']
+        inputs = prepare_batch(b)
+        token_ind = b['token_indicators']
 
         # calculate the loss function using the transformer model
         total_loss, _ = model.loss(inputs, training=True)
@@ -121,7 +121,7 @@ def train_faster_rcnn_dataset(train_folder,
         total_loss = total_loss / tf.reduce_sum(token_ind[:, :-1], axis=1)
         total_loss = tf.reduce_mean(total_loss)
         if verbose:
-            print('It: {} Train Loss: {}'.format(iteration, total_loss))
+            print('It: {} Train Loss: {}'.format(it, total_loss))
 
         # occasionally do some extra processing during training
         # such as printing the labels and model predictions
@@ -129,7 +129,7 @@ def train_faster_rcnn_dataset(train_folder,
 
             # process the dataset batch dictionary into the standard
             # model input format
-            inputs = prepare_batch(batch)
+            inputs = prepare_batch(b)
 
             # show the ground truth sequence from the dataset
             out = tf.strings.reduce_join(
@@ -146,15 +146,21 @@ def train_faster_rcnn_dataset(train_folder,
 
         return total_loss
 
+    # run an initial forward pass using the model in order to build the
+    # weights and define the shapes at every layer
+    for batch in train_dataset.take(1):
+        loss_function(-1, batch, decode=False, verbose=False)
+
     # restore an existing model if one exists and create a directory
     # if the ckpt directory does not exist
     tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
     if tf.io.gfile.exists(model_ckpt + '.index'):
         model.load_weights(model_ckpt)
 
-    # TODO: Brandon
-    #  do early stopping using a noisy estimate of the BLEU score
+    # set up variables for early stopping; only save checkpoints when
+    # best validation loss has improved
     best_loss = 999999.0
+    var_list = model.trainable_variables
 
     # training for a pre specified number of epochs while also annealing
     # the learning rate linearly towards zero
@@ -167,7 +173,7 @@ def train_faster_rcnn_dataset(train_folder,
             # keras requires the loss be a function
             optim.minimize(lambda: loss_function(
                 iteration, batch, decode=iteration % 100 == 0, verbose=True),
-                           model.trainable_variables)
+                           var_list)
 
             # increment the number of training steps so far; note this
             # does not save with the model and is reset when loading a
@@ -194,7 +200,7 @@ def train_faster_rcnn_dataset(train_folder,
         validation_loss = validation_loss / denom
         print('It: {} Val Loss: {}'.format(iteration, validation_loss))
 
-        # save once at the end of every epoch; btu only save when
+        # save once at the end of every epoch; but only save when
         # the validation loss becomes smaller
         if best_loss > validation_loss:
             best_loss = validation_loss

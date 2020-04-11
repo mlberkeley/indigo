@@ -12,6 +12,7 @@ class EncoderLayer(Layer):
                  hidden_size,
                  heads,
                  queries_dropout=0.,
+                 keys_dropout=0.,
                  values_dropout=0.,
                  causal=True,
                  **kwargs):
@@ -32,6 +33,9 @@ class EncoderLayer(Layer):
         queries_dropout: float
             the ratio of units to drop during training to the
             number of units in each attention layer
+        keys_dropout: float
+            the ratio of units to drop during training to the
+            number of units in each attention layer
         values_dropout: float
             the ratio of units to drop during training to the
             number of units in each attention layer
@@ -42,8 +46,8 @@ class EncoderLayer(Layer):
 
         # the core attention and processing variables
         self.attention = Attention(
-            heads,
             queries_dropout=queries_dropout,
+            keys_dropout=keys_dropout,
             values_dropout=values_dropout,
             causal=causal)
         self.block0 = Block(hidden_size // 2,
@@ -59,6 +63,7 @@ class EncoderLayer(Layer):
         self.hidden_size = hidden_size
         self.heads = heads
         self.queries_dropout = queries_dropout
+        self.keys_dropout = keys_dropout
         self.values_dropout = values_dropout
         self.causal = causal
         self.kwargs = kwargs
@@ -79,18 +84,37 @@ class EncoderLayer(Layer):
             the result of applying a multi head attention mechanism
             same shape as inputs"""
 
-        activations = self.block0(inputs.values, **kwargs)
-        queries, keys, values = tf.split(activations, 3, axis=2)
-        attention_input = AttentionInput(
-            queries=queries,
-            keys=keys,
-            values=values,
-            queries_mask=inputs.values_mask,
-            values_mask=inputs.values_mask)
+        # calculate the shape of the values tensor before performing attention
+        # used when separating the heads from channels
+        shape = tf.shape(inputs.values)
+        hidden_dim = self.hidden_size // self.heads
 
-        y = self.attention(attention_input, **kwargs)
-        y = self.block1(y, **kwargs)
-        inputs.values = inputs.values + y
+        # pass the input through a feed forward processing block and
+        # separate heads from channels
+        activations = self.block0(inputs.values, **kwargs)
+        activations = tf.transpose(tf.reshape(activations, [
+            shape[0], shape[1], self.heads, hidden_dim * 3]), [0, 2, 1, 3])
+
+        # convert the inputs into the standard data class format expected
+        # by the attention class
+        values_mask = tf.expand_dims(inputs.values_mask, 1)
+        attention_input = AttentionInput(
+            queries=activations[..., :hidden_dim],
+            keys=activations[..., hidden_dim:2 * hidden_dim],
+            values=activations[..., 2 * hidden_dim:],
+            queries_mask=values_mask,
+            values_mask=values_mask)
+
+        # pass the input through an attention processing block and
+        # flatten the heads and channels
+        activations = self.attention(attention_input, **kwargs)
+        activations = tf.reshape(tf.transpose(activations, [
+            0, 2, 1, 3]), [shape[0], shape[1], self.heads * hidden_dim])
+
+        # pass the outputs of the attention through another feed forward
+        # processing block a residual connection
+        activations = self.block1(activations, **kwargs)
+        inputs.values = inputs.values + activations
         return inputs
 
     def get_config(self):
@@ -108,6 +132,7 @@ class EncoderLayer(Layer):
                       hidden_size=self.hidden_size,
                       heads=self.heads,
                       queries_dropout=self.queries_dropout,
+                      keys_dropout=self.keys_dropout,
                       values_dropout=self.values_dropout,
                       causal=self.causal,
                       ** self.kwargs)
