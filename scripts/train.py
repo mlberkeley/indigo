@@ -13,17 +13,17 @@ if __name__ == "__main__":
     parser.add_argument(
         '--validate_folder', type=str, default='tfrecord')
     parser.add_argument(
-        '--batch_size', type=int, default=5)
+        '--batch_size', type=int, default=128)
     parser.add_argument(
         '--vocab_file', type=str, default='vocab.txt')
     parser.add_argument(
-        '--num_epochs', type=int, default=100000)
+        '--num_epochs', type=int, default=10)
     parser.add_argument(
-        '--model_ckpt', type=str, default='ckpt/decoder')
+        '--model_ckpt', type=str, default='ckpt/indigo_l2r')
     parser.add_argument(
-        '--embedding_size', type=int, default=256)
+        '--embedding_size', type=int, default=1024)
     parser.add_argument(
-        '--num_layers', type=int, default=1)
+        '--num_layers', type=int, default=4)
     parser.add_argument(
         '--first_layer', type=str,
         default='region', choices=['region', 'discrete', 'continuous'])
