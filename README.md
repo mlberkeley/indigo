@@ -1,6 +1,4 @@
-(Unofficial) TensorFlow 2 Implementation of the Transformer-InDIGO model: see the paper
-
-https://arxiv.org/abs/1905.12790
+(Unofficial) TensorFlow 2 Implementation of the Transformer-InDIGO model: [see the paper](https://arxiv.org/abs/1905.12790).
 
 # Transformer-InDIGO
 
