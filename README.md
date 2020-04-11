@@ -1,6 +1,8 @@
-# Transformer-InDIGO
+(Unofficial) TensorFlow 2 Implementation of the Transformer-InDIGO model: see the paper
 
-(Unofficial) Implementation of the Transformer-InDIGO paper in TemsorFlow 2: https://arxiv.org/abs/1905.12790
+https://arxiv.org/abs/1905.12790
+
+# Transformer-InDIGO
 
 How effective is the monolithic left-to-right decoding strategy employed by modern language modeling systems, and what are the alternatives? In this project, we explore the viability and implications of non-sequential and partially-autoregressive language models. This package is our research framework. Have Fun! -Brandon
 
