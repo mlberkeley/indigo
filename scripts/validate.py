@@ -23,6 +23,8 @@ if __name__ == "__main__":
     parser.add_argument(
         '--embedding_size', type=int, default=256)
     parser.add_argument(
+        '--heads', type=int, default=4)
+    parser.add_argument(
         '--num_layers', type=int, default=2)
     parser.add_argument(
         '--first_layer', type=str,
@@ -39,7 +41,7 @@ if __name__ == "__main__":
 
     model = Transformer(vocab.size(),
                         args.embedding_size,
-                        4,
+                        args.heads,
                         args.num_layers,
                         queries_dropout=0.,
                         keys_dropout=0.,
