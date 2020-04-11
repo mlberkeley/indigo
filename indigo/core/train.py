@@ -138,7 +138,7 @@ def train_faster_rcnn_dataset(train_folder,
 
             # show several model predicted sequences and their likelihoods
             cap, log_p = beam_search(
-                inputs, model, beam_size=3, max_iterations=20)
+                inputs, model, beam_size=1, max_iterations=20)
             cap = tf.strings.reduce_join(
                 vocab.ids_to_words(cap)[0], axis=1, separator=' ').numpy()
             for c, p in zip(cap, tf.math.exp(log_p)[0].numpy()):
