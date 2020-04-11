@@ -197,16 +197,21 @@ class Pointer(Layer):
             the number of beams to be expanded by this layer in an
             autoregressive model"""
 
-        # compute a distribution over tokens
+        # compute a distribution over pointer locations
         logits = tf.math.log_softmax(self.call(inputs, **kwargs)[:, -1])
         batch_size = int(tf.shape(logits)[0] // last_beam_size)
 
+        # note that when the sequence length is small the number of locations
+        # that are visible to the pointer network may be too small; the
+        # effective beam size is reduced in these cases
+        sample_size = min(int(tf.shape(logits)[1]), beam_size)
+
         # sample the top beam_size candidates
-        log_probs, ids = tf.math.top_k(logits, k=beam_size)
+        log_probs, ids = tf.math.top_k(logits, k=sample_size)
 
         # when a beam is closed all candidates are the same
         # this prevents the same candidates from being sampled twice
-        first = tf.one_hot(tf.fill(tf.shape(log_probs)[:1], 0), beam_size)
+        first = tf.one_hot(tf.fill(tf.shape(log_probs)[:1], 0), sample_size)
         closed_log_probs = tf.where(tf.equal(first, 0), tf.fill(
             tf.shape(first), -999999.), tf.fill(tf.shape(first), 0.))
 
@@ -219,27 +224,32 @@ class Pointer(Layer):
         # manipulate the log probabilities to extract all possible
         # next beam candidates and their probability
         log_probs = tf.reshape(log_probs, [
-            batch_size, beam_size, beam_size])
+            batch_size, last_beam_size, sample_size])
         log_probs = tf.reshape(inputs.log_probs, [
-            batch_size, beam_size, 1]) + log_probs
+            batch_size, last_beam_size, 1]) + log_probs
         log_probs = tf.reshape(log_probs, [
-            batch_size, beam_size * beam_size])
+            batch_size, last_beam_size * sample_size])
+
+        # note that when the sequence length is small the number of locations
+        # that are visible to the pointer network may be too small; the
+        # effective beam size is reduced in these cases
+        candidate_size = min(int(tf.shape(log_probs)[1]), beam_size)
 
         # select the top beam_size candidates
-        log_probs, beam_ids = tf.math.top_k(log_probs, k=beam_size)
+        log_probs, beam_ids = tf.math.top_k(log_probs, k=candidate_size)
 
         # these indices may be a bit subtle; they work as follows
         # the last dim has last_beam_size * beam_size elements
         # the first beam_size elements represent candidate proposals
         # from a single original beam
-        new_beam_ids = tf.math.floormod(beam_ids, beam_size)
-        old_beam_ids = tf.math.floordiv(beam_ids, beam_size)
+        new_beam_ids = tf.math.floormod(beam_ids, sample_size)
+        old_beam_ids = tf.math.floordiv(beam_ids, sample_size)
 
         # select the ids based on their beams that are from the beams with
         # highest log probability
-        ids = tf.reshape(ids, [batch_size, last_beam_size * beam_size])
+        ids = tf.reshape(ids, [batch_size, last_beam_size * sample_size])
         ids = tf.gather(ids, new_beam_ids, batch_dims=1)
-        ids = tf.reshape(ids, [batch_size * beam_size, 1])
+        ids = tf.reshape(ids, [batch_size * candidate_size, 1])
 
         # this function helps select the hidden activations from
         # inputs that correspond to old selected beams
@@ -282,7 +292,7 @@ class Pointer(Layer):
         # update log probability and note that the pointer network
         # does not specify a termination condition by itself
         inputs.log_probs = log_probs
-        return inputs, closed, beam_size
+        return inputs, closed, candidate_size
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
