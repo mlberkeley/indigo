@@ -37,7 +37,7 @@ if __name__ == "__main__":
         default='region', choices=['region', 'discrete', 'continuous'])
     parser.add_argument(
         '--final_layer', type=str,
-        default='logits', choices=['indigo', 'logits'])
+        default='indigo', choices=['indigo', 'logits'])
     args = parser.parse_args()
 
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:
