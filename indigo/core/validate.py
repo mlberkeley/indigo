@@ -5,6 +5,7 @@ from indigo.algorithms.beam_search import beam_search
 from nlgeval import NLGEval
 import tensorflow as tf
 import os
+import numpy as np
 
 
 def prepare_batch(batch):
@@ -80,7 +81,6 @@ def validate_faster_rcnn_dataset(tfrecord_folder,
     dataset = faster_rcnn_dataset(tfrecord_folder, batch_size)
     model.load_weights(model_ckpt)
 
-    nlgeval = NLGEval()
     ref_caps = {}
     hyp_caps = {}
 
@@ -115,6 +115,9 @@ def validate_faster_rcnn_dataset(tfrecord_folder,
             hyp_caps[paths[i]] = cap[i, 0].decode("utf-8").replace(
                 "<pad>", "").replace("<start>", "").replace(
                 "<end>", "").replace("  ", " ").strip()
+            print("{}: [p = {}] {}".format(paths[i], 
+                                           np.exp(log_p[i, 0].numpy()),
+                                           hyp_caps[paths[i]]))
 
     # convert the dictionaries into lists for nlg eval input format
     ref_caps_list = []
@@ -122,6 +125,8 @@ def validate_faster_rcnn_dataset(tfrecord_folder,
     for key in ref_caps.keys():
         ref_caps_list.append(ref_caps[key])
         hyp_caps_list.append(hyp_caps[key])
+
+    nlgeval = NLGEval()
 
     # compute several natural language generation metrics
     metrics = nlgeval.compute_metrics([*zip(*ref_caps_list)], hyp_caps_list)
