@@ -131,16 +131,16 @@ def train_faster_rcnn_dataset(train_folder,
             # model input format
             inputs = prepare_batch(b)
 
-            # show the ground truth sequence from the dataset
-            for i in range(3):
-                out = tf.strings.reduce_join(
-                    vocab.ids_to_words(inputs.ids)[i], axis=0, separator=' ')
-                print("Ground Truth: {}".format(out.numpy().decode('utf8')))
-
-            # show several model predicted sequences and their likelihoods
+            # calculate the ground truth sequence for this batch; and
+            # perform beam search using the current model
+            out = tf.strings.reduce_join(
+                vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
             cap, log_p = beam_search(
                 inputs, model, beam_size=3, max_iterations=20)
-            for i in range(3):
+
+            # show several model predicted sequences and their likelihoods
+            for i in range(cap.shape[0]):
+                print("Ground Truth: {}".format(out[i].numpy().decode('utf8')))
                 cpa = tf.strings.reduce_join(
                     vocab.ids_to_words(cap)[i], axis=1, separator=' ').numpy()
                 for c, p in zip(cpa, tf.math.exp(log_p)[i].numpy()):

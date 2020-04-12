@@ -66,18 +66,22 @@ def beam_search(inputs,
         inputs.queries_mask = tf.fill(tf.shape(inputs.queries), True)
         inputs.values = inputs.region
 
+    # helper function for un flattening the beam size from the batch axis
+    def expand(x):
+        shape = tf.shape(x)[1:]
+        return tf.reshape(x, tf.concat([[
+            batch_size, last_beam_size], shape], axis=0))
+
     # decoding is finished so un flatten the beam dimension
     # returns a shape like [batch_size, beam_size, sequence_length]
-    ids = tf.stack(tf.split(inputs.ids, beam_size, axis=0), axis=1)
+    ids = expand(inputs.ids)
 
     # when the model decodes permutation matrices in additions to ids;
     # then sort ids according to the decoded permutation
     if model.final_layer == 'indigo':
-        pos = inputs.positions[:, 1:, 1:]
-        pos = tf.stack(tf.split(pos, beam_size, axis=0), axis=1)
-        pos = tf.reduce_sum(tf.nn.relu(pos), axis=2)
+        pos = tf.reduce_sum(tf.nn.relu(expand(inputs.positions)), axis=2)
         pos = tf.one_hot(pos, tf.shape(pos)[2], dtype=tf.int32)
         ids = tf.squeeze(tf.matmul(tf.expand_dims(ids, 2), pos), 2)
 
     return ids, tf.reshape(
-        inputs.log_probs, [batch_size, beam_size])
+        inputs.log_probs, [batch_size, last_beam_size])
