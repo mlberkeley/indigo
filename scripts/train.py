@@ -1,11 +1,7 @@
-import tensorflow as tf
-for gpu in tf.config.experimental.list_physical_devices('GPU'):
-    tf.config.experimental.set_memory_growth(gpu, True)
-
-
 from indigo.core.train import train_faster_rcnn_dataset
 from indigo.nn.transformer import Transformer
 from indigo.process.captions import Vocabulary
+import tensorflow as tf
 import argparse
 
 
@@ -17,7 +13,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--validate_folder', type=str, default='tfrecord')
     parser.add_argument(
-        '--batch_size', type=int, default=32)
+        '--batch_size', type=int, default=16)
     parser.add_argument(
         '--vocab_file', type=str, default='vocab.txt')
     parser.add_argument(
@@ -27,7 +23,15 @@ if __name__ == "__main__":
     parser.add_argument(
         '--embedding_size', type=int, default=256)
     parser.add_argument(
+        '--heads', type=int, default=4)
+    parser.add_argument(
         '--num_layers', type=int, default=2)
+    parser.add_argument(
+        '--queries_dropout', type=float, default=0.)
+    parser.add_argument(
+        '--keys_dropout', type=float, default=0.)
+    parser.add_argument(
+        '--values_dropout', type=float, default=0.)
     parser.add_argument(
         '--first_layer', type=str,
         default='region', choices=['region', 'discrete', 'continuous'])
@@ -43,10 +47,11 @@ if __name__ == "__main__":
 
     model = Transformer(vocab.size(),
                         args.embedding_size,
-                        4,
+                        args.heads,
                         args.num_layers,
-                        queries_dropout=0.,
-                        values_dropout=0.,
+                        queries_dropout=args.queries_dropout,
+                        keys_dropout=args.keys_dropout,
+                        values_dropout=args.values_dropout,
                         causal=True,
                         first_layer=args.first_layer,
                         final_layer=args.final_layer)

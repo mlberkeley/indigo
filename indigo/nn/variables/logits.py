@@ -149,7 +149,7 @@ class Logits(Layer):
 
         # compute a distribution over tokens
         logits = tf.math.log_softmax(self.call(inputs, **kwargs)[:, -1])
-        batch_size = int(tf.shape(logits)[0] // last_beam_size)
+        batch_size = tf.shape(logits)[0] // last_beam_size
 
         # sample the top beam_size candidates
         log_probs, ids = tf.math.top_k(logits, k=beam_size)
@@ -195,10 +195,12 @@ class Logits(Layer):
         # inputs that correspond to old selected beams
         # this is necessary because future layers may depend on activations
         # that are a function of which beam was selected
-        def select(tensor):
-            return tf.concat(tf.unstack(tf.gather(tf.stack(tf.split(
-                tensor, batch_size, axis=0), axis=0),
-                old_beam_ids, batch_dims=1), axis=0), axis=0)
+        def select(x):
+            shape = tf.shape(x)[1:]
+            s0 = tf.concat([[batch_size, last_beam_size], shape], axis=0)
+            s1 = tf.concat([[batch_size * beam_size], shape], axis=0)
+            return tf.reshape(tf.gather(tf.reshape(
+                x, s0), old_beam_ids, batch_dims=1), s1)
 
         # this function helps perform the previously described selection
         # operation over the contents of a python 3.7 dataclass

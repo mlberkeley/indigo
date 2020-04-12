@@ -24,17 +24,17 @@ def causal_mask(scores):
 
     # clever mask for creating a lower triangular matrix
     row_idx = tf.math.cumsum(
-        tf.ones(shape=shape, dtype=tf.int32), axis=1)
+        tf.ones(shape=shape, dtype=tf.int32), axis=-2)
     col_idx = tf.math.cumsum(
-        tf.ones(shape=shape, dtype=tf.int32), axis=2)
+        tf.ones(shape=shape, dtype=tf.int32), axis=-1)
     return tf.greater_equal(row_idx, col_idx)
 
 
 class Attention(tf.keras.layers.Layer):
 
     def __init__(self,
-                 heads,
                  queries_dropout=0.,
+                 keys_dropout=0.,
                  values_dropout=0.,
                  causal=True):
         """Creates the backbone for multi headed attention
@@ -42,10 +42,10 @@ class Attention(tf.keras.layers.Layer):
 
         Arguments:
 
-        heads: int
-            the number of heads in each multi head attention layer
-            a good default is 4 or 8
         queries_dropout: float
+            the ratio of units to drop during training to the
+            number of units in each attention layer
+        keys_dropout: float
             the ratio of units to drop during training to the
             number of units in each attention layer
         values_dropout: float
@@ -56,17 +56,14 @@ class Attention(tf.keras.layers.Layer):
             a causal mask to preserve the auto regressive property"""
         super(Attention, self).__init__()
 
-        self.queries_dropout = tf.keras.layers.Dropout(
-            queries_dropout)
-        self.keys_dropout = tf.keras.layers.SpatialDropout1D(
-            values_dropout)
-        self.values_dropout = tf.keras.layers.SpatialDropout1D(
-            values_dropout)
+        self.q_dropout = tf.keras.layers.Dropout(queries_dropout)
+        self.k_dropout = tf.keras.layers.SpatialDropout2D(keys_dropout)
+        self.v_dropout = tf.keras.layers.SpatialDropout2D(values_dropout)
 
         # these parameters need to be stored so that
         # tf.layers.model.save_model works
-        self.heads = heads
         self.queries_dropout_rate = queries_dropout
+        self.keys_dropout_rate = keys_dropout
         self.values_dropout_rate = values_dropout
         self.causal = causal
 
@@ -86,32 +83,26 @@ class Attention(tf.keras.layers.Layer):
             the result of applying a multi head attention mechanism
             will be shaped [batch_dim, seq_dim, channels]"""
 
-        # apply dropout to the queries tensor
-        queries = self.queries_dropout(inputs.queries, **kwargs)
-        queries = tf.concat(
-            tf.split(queries, self.heads, axis=2), axis=0)
+        # apply dropout to the queries keys and values tensor
+        # requires all to be like [batch, heads, ]
+        queries = self.q_dropout(inputs.queries, **kwargs)
+        keys = self.k_dropout(inputs.keys, **kwargs)
+        values = self.v_dropout(inputs.values, **kwargs)
 
-        # apply dropout to the keys tensor
-        keys = self.keys_dropout(inputs.keys, **kwargs)
-        keys = tf.concat(
-            tf.split(keys, self.heads, axis=2), axis=0)
-
-        # apply dropout to the values tensor
-        values = self.values_dropout(inputs.values, **kwargs)
-        values = tf.concat(
-            tf.split(values, self.heads, axis=2), axis=0)
-
-        # compute the multi head attention weights
+        # compute the multi head soft attention weights using
+        # scaled dot product attention
         size = tf.math.sqrt(
-            tf.cast(tf.shape(queries)[2], tf.float32))
-        scores = inputs.bias if hasattr(inputs, 'bias') \
-                 and inputs.bias is not None else 0
-        scores = scores + tf.matmul(
+            tf.cast(tf.shape(queries)[-1], tf.float32))
+        scores = tf.matmul(
             queries, keys, transpose_b=True) / size
 
-        # apply a causal mask to the attention weights
-        mask = tf.tile(inputs.values_mask, [self.heads, 1])
-        mask = tf.expand_dims(mask, 1)
+        # if an attention bias is provided that add the attention bias
+        # to the pre softmax scores matrix
+        if hasattr(inputs, 'bias') and inputs.bias is not None:
+            scores = scores + inputs.bias
+
+        # apply a causal mask to the soft attention weights
+        mask = tf.expand_dims(inputs.values_mask, -2)
         if self.causal:
             mask = tf.logical_and(mask, causal_mask(scores))
 
@@ -119,16 +110,10 @@ class Attention(tf.keras.layers.Layer):
         scores = tf.math.softmax(tf.where(
             mask, scores, tf.fill(tf.shape(scores), -999999.)))
 
-        # apply the attention weights to compute an output sequence
-        # also flatten the heads dimension into channels
-        outputs = tf.matmul(scores, values)
-        outputs = tf.concat(
-            tf.split(outputs, self.heads, axis=0), axis=2)
-
         # mask the output sequence where appropriate
-        return tf.where(
-            tf.expand_dims(inputs.queries_mask, 2),
-            outputs, tf.zeros_like(outputs))
+        outputs = tf.matmul(scores, values)
+        return tf.where(tf.expand_dims(inputs.queries_mask, -1),
+                        outputs, tf.zeros_like(outputs))
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
@@ -141,8 +126,8 @@ class Attention(tf.keras.layers.Layer):
             layers base class and all class parameters"""
 
         # these are all that is needed to rebuild this class
-        config = dict(heads=self.heads,
-                      queries_dropout=self.queries_dropout_rate,
+        config = dict(queries_dropout=self.queries_dropout_rate,
+                      keys_dropout=self.keys_dropout_rate,
                       values_dropout=self.values_dropout_rate,
                       causal=self.causal)
 

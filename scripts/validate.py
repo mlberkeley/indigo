@@ -1,11 +1,7 @@
-import tensorflow as tf
-for gpu in tf.config.experimental.list_physical_devices('GPU'):
-    tf.config.experimental.set_memory_growth(gpu, True)
-
-
 from indigo.core.validate import validate_faster_rcnn_dataset
 from indigo.nn.transformer import Transformer
 from indigo.process.captions import Vocabulary
+import tensorflow as tf
 import argparse
 
 
@@ -27,6 +23,8 @@ if __name__ == "__main__":
     parser.add_argument(
         '--embedding_size', type=int, default=256)
     parser.add_argument(
+        '--heads', type=int, default=4)
+    parser.add_argument(
         '--num_layers', type=int, default=2)
     parser.add_argument(
         '--first_layer', type=str,
@@ -43,9 +41,10 @@ if __name__ == "__main__":
 
     model = Transformer(vocab.size(),
                         args.embedding_size,
-                        4,
+                        args.heads,
                         args.num_layers,
                         queries_dropout=0.,
+                        keys_dropout=0.,
                         values_dropout=0.,
                         causal=True,
                         first_layer=args.first_layer,

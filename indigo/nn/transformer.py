@@ -17,6 +17,7 @@ class Transformer(Sequential):
                  heads,
                  num_layers,
                  queries_dropout=0.,
+                 keys_dropout=0.,
                  values_dropout=0.,
                  causal=True,
                  logits_per_slot=1,
@@ -43,6 +44,9 @@ class Transformer(Sequential):
         queries_dropout: float
             the ratio of units to drop during training to the
             number of units in each attention layer
+        keys_dropout: float
+            the ratio of units to drop during training to the
+            number of units in each attention layer
         values_dropout: float
             the ratio of units to drop during training to the
             number of units in each attention layer
@@ -51,7 +55,7 @@ class Transformer(Sequential):
             a causal mask to preserve the auto regressive property
         logits_per_slot: int
             specifies the number of logits per element the pointer
-            network attends to; default is 2
+            network attends to; default is 1
         first_layer: class
             specifies the class to use for the first layer in the transformer
             defaults to WordFeature if not specified
@@ -59,11 +63,11 @@ class Transformer(Sequential):
             specifies the class to use for the final layer in the transformer
             defaults to Logits if not specified"""
 
-        # TODO: the layers sequential does not technically yet
-        #  support nested inputs but it should
+        # TODO: Sequential does not technically support nested inputs
         layers = []
 
         # the first layer in the transformer depends on the data modality
+        # for image captioning using RCNN features select 'region'
         if first_layer == 'discrete':
             layers.extend([DiscreteFeature(
                 num_embeddings, hidden_size, **kwargs)])
@@ -75,18 +79,27 @@ class Transformer(Sequential):
                 num_embeddings, hidden_size, **kwargs)])
 
         # the encoder processes values and the decoder processes queries
+        # build the encoder first in the stack
         layers.extend([EncoderLayer(
             hidden_size, hidden_size // 2, heads,
-            queries_dropout=queries_dropout, values_dropout=values_dropout,
+            queries_dropout=queries_dropout,
+            keys_dropout=keys_dropout,
+            values_dropout=values_dropout,
             causal=False, **kwargs) for _ in range(num_layers)])
+
+        # depending on the type of network possibly condition on position
+        # build the decoder second in the stack
         cls = (DecoderWithPositionLayer
                if final_layer == 'indigo' else DecoderLayer)
         layers.extend([cls(
             hidden_size, hidden_size // 2, heads,
-            queries_dropout=queries_dropout, values_dropout=values_dropout,
+            queries_dropout=queries_dropout,
+            keys_dropout=keys_dropout,
+            values_dropout=values_dropout,
             causal=causal, **kwargs) for _ in range(num_layers)])
 
         # the final layer in the transformer depends on the model purpose
+        # to run Transformer-InDIGO select 'indigo'
         if final_layer == 'logits' or final_layer == 'indigo':
             layers.extend([Logits(num_embeddings, **kwargs)])
         if final_layer == 'indigo':
@@ -103,6 +116,7 @@ class Transformer(Sequential):
         self.heads = heads
         self.num_layers = num_layers
         self.queries_dropout = queries_dropout
+        self.keys_dropout = keys_dropout
         self.values_dropout = values_dropout
         self.causal = causal
         self.logits_per_slot = logits_per_slot
@@ -126,6 +140,7 @@ class Transformer(Sequential):
                       heads=self.heads,
                       num_layers=self.num_layers,
                       queries_dropout=self.queries_dropout,
+                      keys_dropout=self.keys_dropout,
                       values_dropout=self.values_dropout,
                       causal=self.causal,
                       logits_per_slot=self.logits_per_slot,
