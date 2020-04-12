@@ -15,6 +15,8 @@ if __name__ == "__main__":
     parser.add_argument(
         '--batch_size', type=int, default=16)
     parser.add_argument(
+        '--beam_size', type=int, default=3)
+    parser.add_argument(
         '--vocab_file', type=str, default='vocab.txt')
     parser.add_argument(
         '--num_epochs', type=int, default=10)
@@ -59,6 +61,7 @@ if __name__ == "__main__":
     train_faster_rcnn_dataset(args.train_folder,
                               args.validate_folder,
                               args.batch_size,
+                              args.beam_size,
                               args.num_epochs,
                               model,
                               args.model_ckpt,

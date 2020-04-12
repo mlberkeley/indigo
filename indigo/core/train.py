@@ -69,6 +69,7 @@ def prepare_batch(batch):
 def train_faster_rcnn_dataset(train_folder,
                               validate_folder,
                               batch_size,
+                              beam_size,
                               num_epoch,
                               model,
                               model_ckpt,
@@ -88,6 +89,9 @@ def train_faster_rcnn_dataset(train_folder,
         used for validation
     batch_size: int
         the maximum number of training examples in a
+        single batch
+    beam_size: int
+        the maximum number of beams to use when decoding in a
         single batch
     num_epochs: int
         the number of loops through the entire dataset to
@@ -136,7 +140,7 @@ def train_faster_rcnn_dataset(train_folder,
             out = tf.strings.reduce_join(
                 vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
             cap, log_p = beam_search(
-                inputs, model, beam_size=1, max_iterations=20)
+                inputs, model, beam_size=beam_size, max_iterations=20)
 
             # show several model predicted sequences and their likelihoods
             for i in range(cap.shape[0]):
