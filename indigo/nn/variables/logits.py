@@ -199,8 +199,8 @@ class Logits(Layer):
             shape = tf.shape(x)[1:]
             s0 = tf.concat([[batch_size, last_beam_size], shape], axis=0)
             s1 = tf.concat([[batch_size * beam_size], shape], axis=0)
-            return tf.reshape(tf.gather(tf.reshape(
-                x, s0), old_beam_ids, batch_dims=1), s1)
+            return tf.reshape(tf.gather(
+                tf.reshape(x, s0), old_beam_ids, batch_dims=1), s1)
 
         # this function helps perform the previously described selection
         # operation over the contents of a python 3.7 dataclass

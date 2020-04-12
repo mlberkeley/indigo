@@ -233,10 +233,10 @@ class Pointer(Layer):
         # note that when the sequence length is small the number of locations
         # that are visible to the pointer network may be too small; the
         # effective beam size is reduced in these cases
-        candidate_size = tf.minimum(tf.shape(log_probs)[1], beam_size)
+        cand_size = tf.minimum(tf.shape(log_probs)[1], beam_size)
 
         # select the top beam_size candidates
-        log_probs, beam_ids = tf.math.top_k(log_probs, k=candidate_size)
+        log_probs, beam_ids = tf.math.top_k(log_probs, k=cand_size)
 
         # these indices may be a bit subtle; they work as follows
         # the last dim has last_beam_size * beam_size elements
@@ -249,7 +249,7 @@ class Pointer(Layer):
         # highest log probability
         ids = tf.reshape(ids, [batch_size, last_beam_size * sample_size])
         ids = tf.gather(ids, new_beam_ids, batch_dims=1)
-        ids = tf.reshape(ids, [batch_size * candidate_size, 1])
+        ids = tf.reshape(ids, [batch_size * cand_size, 1])
 
         # this function helps select the hidden activations from
         # inputs that correspond to old selected beams
@@ -258,9 +258,9 @@ class Pointer(Layer):
         def select(x):
             shape = tf.shape(x)[1:]
             s0 = tf.concat([[batch_size, last_beam_size], shape], axis=0)
-            s1 = tf.concat([[batch_size * candidate_size], shape], axis=0)
-            return tf.reshape(tf.gather(tf.reshape(
-                x, s0), old_beam_ids, batch_dims=1), s1)
+            s1 = tf.concat([[batch_size * cand_size], shape], axis=0)
+            return tf.reshape(tf.gather(
+                tf.reshape(x, s0), old_beam_ids, batch_dims=1), s1)
 
         # this function helps perform the previously described selection
         # operation over the contents of a python 3.7 dataclass
@@ -293,8 +293,8 @@ class Pointer(Layer):
 
         # update log probability and note that the pointer network
         # does not specify a termination condition by itself
-        inputs.log_probs = log_probs
-        return inputs, closed, candidate_size
+        inputs.log_probs = tf.reshape(log_probs, [batch_size * cand_size])
+        return inputs, closed, cand_size
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

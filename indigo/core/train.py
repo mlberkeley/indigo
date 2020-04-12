@@ -132,17 +132,19 @@ def train_faster_rcnn_dataset(train_folder,
             inputs = prepare_batch(b)
 
             # show the ground truth sequence from the dataset
-            out = tf.strings.reduce_join(
-                vocab.ids_to_words(inputs.ids)[0], axis=0, separator=' ')
-            print("Ground Truth: {}".format(out.numpy().decode('utf8')))
+            for i in range(3):
+                out = tf.strings.reduce_join(
+                    vocab.ids_to_words(inputs.ids)[i], axis=0, separator=' ')
+                print("Ground Truth: {}".format(out.numpy().decode('utf8')))
 
             # show several model predicted sequences and their likelihoods
             cap, log_p = beam_search(
-                inputs, model, beam_size=1, max_iterations=20)
-            cap = tf.strings.reduce_join(
-                vocab.ids_to_words(cap)[0], axis=1, separator=' ').numpy()
-            for c, p in zip(cap, tf.math.exp(log_p)[0].numpy()):
-                print("[p = {}] Prediction: {}".format(p, c.decode('utf8')))
+                inputs, model, beam_size=3, max_iterations=20)
+            for i in range(3):
+                cpa = tf.strings.reduce_join(
+                    vocab.ids_to_words(cap)[i], axis=1, separator=' ').numpy()
+                for c, p in zip(cpa, tf.math.exp(log_p)[i].numpy()):
+                    print("[p = {}] Prediction: {}".format(p, c.decode('utf8')))
 
         return total_loss
 
