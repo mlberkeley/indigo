@@ -2,7 +2,6 @@ from indigo.data.load import faster_rcnn_dataset
 from indigo.nn.input import TransformerInput
 from indigo.nn.input import RegionFeatureInput
 from indigo.algorithms.beam_search import beam_search
-from nlgeval import NLGEval
 import tensorflow as tf
 import os
 import numpy as np
@@ -127,6 +126,7 @@ def validate_faster_rcnn_dataset(tfrecord_folder,
         ref_caps_list.append(ref_caps[key])
         hyp_caps_list.append(hyp_caps[key])
 
+    from nlgeval import NLGEval
     nlgeval = NLGEval()
 
     # compute several natural language generation metrics
