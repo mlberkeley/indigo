@@ -182,13 +182,12 @@ class Logits(Layer):
         # the last dim has last_beam_size * beam_size elements
         # the first beam_size elements represent candidate proposals
         # from a single original beam
-        new_beam_ids = tf.math.floormod(beam_ids, beam_size)
         old_beam_ids = tf.math.floordiv(beam_ids, beam_size)
 
         # select the ids based on their beams that are from the beams with
         # highest log probability
         ids = tf.reshape(ids, [batch_size, last_beam_size * beam_size])
-        ids = tf.gather(ids, new_beam_ids, batch_dims=1)
+        ids = tf.gather(ids, beam_ids, batch_dims=1)
         ids = tf.reshape(ids, [batch_size * beam_size, 1])
 
         # this function helps select the hidden activations from

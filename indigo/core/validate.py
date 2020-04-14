@@ -78,7 +78,7 @@ def validate_faster_rcnn_dataset(tfrecord_folder,
         from words to integers"""
 
     # create a validation pipeline
-    dataset = faster_rcnn_dataset(tfrecord_folder, batch_size)
+    dataset = faster_rcnn_dataset(tfrecord_folder, batch_size, shuffle=False)
     model.load_weights(model_ckpt)
 
     ref_caps = {}

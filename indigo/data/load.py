@@ -100,7 +100,8 @@ def parse_faster_rcnn_tf_records(record_files):
 
 
 def faster_rcnn_dataset(tfrecord_folder,
-                        batch_size):
+                        batch_size,
+                        shuffle=True):
     """Builds an input data pipeline for training deep image
     captioning models using region features
 
@@ -112,6 +113,9 @@ def faster_rcnn_dataset(tfrecord_folder,
     batch_size: int
         the maximum number of training examples in a
         single batch
+    shuffle: bool
+        specifies whether to shuffle the training dataset or not;
+        do not shuffle during validation
 
     Returns:
 
@@ -130,7 +134,8 @@ def faster_rcnn_dataset(tfrecord_folder,
         num_parallel_calls=tf.data.experimental.AUTOTUNE,)
 
     # shuffle and pad the data into batches for training
-    dataset = dataset.shuffle(batch_size * 100)
+    if shuffle:
+        dataset = dataset.shuffle(batch_size * 100)
     dataset = dataset.padded_batch(batch_size, padded_shapes={
         "image_path": [],
         "global_features": [1280],
