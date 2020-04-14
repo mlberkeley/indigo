@@ -56,9 +56,11 @@ def greedy_search(inputs,
         # the transformer modifies in place the input data class so
         # we need to replace the transformer inputs at every
         # iteration of decoding
-        inputs.queries = tf.concat([start, inputs.ids], axis=1)
-        inputs.queries_mask = tf.fill(tf.shape(inputs.queries), True)
         inputs.values = inputs.region
+        inputs.queries = tf.concat([start, inputs.ids], axis=1)
+        inputs.queries_mask = tf.concat([
+            inputs.queries_mask,
+            tf.logical_not(closed)[:, tf.newaxis]], axis=1)
 
     # when the model decodes permutation matrices in additions to ids;
     # then sort ids according to the decoded permutation
