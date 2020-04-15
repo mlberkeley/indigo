@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--validate_folder', type=str, default='tfrecord')
+        '--validate_folder', type=str, default='tfrecords')
     parser.add_argument(
         '--ref_folder', type=str, default='captions')
     parser.add_argument(
@@ -17,9 +17,9 @@ if __name__ == "__main__":
     parser.add_argument(
         '--beam_size', type=int, default=12)
     parser.add_argument(
-        '--vocab_file', type=str, default='vocab.txt')
+        '--vocab_file', type=str, default='train2017_vocab.txt')
     parser.add_argument(
-        '--model_ckpt', type=str, default='ckpt/decoder')
+        '--model_ckpt', type=str, default='ckpt/indigo_l2r')
     parser.add_argument(
         '--embedding_size', type=int, default=256)
     parser.add_argument(
