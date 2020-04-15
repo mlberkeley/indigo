@@ -43,7 +43,7 @@ def beam_search(inputs,
     inputs.queries = tf.fill([batch_size, 1], 2)
     inputs.queries_mask = tf.fill([batch_size, 1], True)
     inputs.ids = tf.fill([batch_size, 0], 2)
-    inputs.relative_positions = tf.fill([batch_size, 1, 1], 0)
+    inputs.relative_positions = tf.fill([batch_size, 1, 1], 0.)
     inputs.absolute_positions = None
     inputs.log_probs = tf.zeros([batch_size])
     inputs.region = inputs.values
@@ -82,7 +82,7 @@ def beam_search(inputs,
     # when the model decodes permutation matrices in additions to ids;
     # then sort ids according to the decoded permutation
     if model.final_layer == 'indigo':
-        pos = inputs.relative_positions[:, 1:, 1:]
+        pos = tf.cast(inputs.relative_positions[:, 1:, 1:], dtype=tf.int32)
         pos = tf.reduce_sum(tf.nn.relu(expand(pos)), axis=2)
         pos = tf.one_hot(pos, tf.shape(pos)[2], dtype=tf.int32)
         ids = tf.squeeze(tf.matmul(tf.expand_dims(ids, 2), pos), 2)

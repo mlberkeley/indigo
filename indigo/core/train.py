@@ -25,8 +25,8 @@ def absolute_to_relative(permutation):
     # this first section will convert the one-hot style indexing to
     # a ternary indexing where -1 means insert to the right of
     # and 1 means insert to the left of word x
-    unsorted_relative = tf.math.cumsum(
-        permutation, axis=2, exclusive=True) - tf.math.cumsum(
+    unsorted_relative = -tf.math.cumsum(
+        permutation, axis=2, exclusive=True) + tf.math.cumsum(
             permutation, axis=2, exclusive=True, reverse=True)
 
     # the second section will sort the matrix of relative positions
