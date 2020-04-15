@@ -83,15 +83,16 @@ def prepare_batch(batch, vocab_size):
         values_mask=tf.greater(image_ind, 0))
 
     # this assignment is necessary for the logits loss
-    inputs.logits_labels = tf.one_hot(words[:, 1:], vocab_size)
     inputs.ids = words[:, 1:]
+    inputs.logits_labels = tf.one_hot(
+        words[:, 1:], tf.cast(vocab_size, tf.int32))
 
     # the dataset is not compiled with an ordering so one must
     # be generated on the fly during training; only
     # applies when using a pointer layer; note that we remove the final
     # row and column which corresponds to the end token
-    inputs.pointer_labels = permutation[:, 1:, 1:]
     inputs.positions = absolute_to_relative(permutation[:, :-1, :-1])
+    inputs.pointer_labels = permutation[:, 1:, 1:]
 
     return inputs
 
@@ -146,7 +147,7 @@ def train_faster_rcnn_dataset(train_folder,
 
         # process the dataset batch dictionary into the standard
         # model input format
-        inputs = prepare_batch(b)
+        inputs = prepare_batch(b, vocab.size())
         token_ind = b['token_indicators']
 
         # calculate the loss function using the transformer model
@@ -163,7 +164,7 @@ def train_faster_rcnn_dataset(train_folder,
 
             # process the dataset batch dictionary into the standard
             # model input format
-            inputs = prepare_batch(b)
+            inputs = prepare_batch(b, vocab.size())
 
             # calculate the ground truth sequence for this batch; and
             # perform beam search using the current model
