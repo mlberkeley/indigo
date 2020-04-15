@@ -51,7 +51,10 @@ class ContinuousFeature(Layer):
             same shape as inputs"""
 
         a = position_encoding(tf.shape(inputs.queries)[1], self.hidden_size)
-        inputs.queries = a + self.embedding(inputs.queries, **kwargs)
+        b = self.embedding(inputs.queries, **kwargs)
+        if inputs.absolute_positions is not None:
+            b = tf.matmul(inputs.absolute_positions, b)
+        inputs.queries = a + b
         inputs.values = self.dense(inputs.values, **kwargs)
         return inputs
 

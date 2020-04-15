@@ -66,8 +66,6 @@ def prepare_batch(batch, vocab_size):
     # token must ALWAYS be decoded first
     permutation = tf.eye(tf.shape(words)[1],
                          batch_shape=tf.shape(words)[:1], dtype=tf.int32)
-    words = tf.squeeze(
-        tf.matmul(tf.expand_dims(words, 1), permutation), 1)
 
     # build a region feature input for the first layer of the model
     region = RegionFeatureInput(features=boxes_features,
@@ -91,8 +89,9 @@ def prepare_batch(batch, vocab_size):
     # be generated on the fly during training; only
     # applies when using a pointer layer; note that we remove the final
     # row and column which corresponds to the end token
-    inputs.positions = absolute_to_relative(permutation[:, :-1, :-1])
+    inputs.relative_positions = absolute_to_relative(permutation[:, :-1, :-1])
     inputs.pointer_labels = permutation[:, 1:, 1:]
+    inputs.absolute_positions = permutation[:, :-1, :-1]
 
     return inputs
 

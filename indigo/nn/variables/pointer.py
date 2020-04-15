@@ -145,14 +145,15 @@ class Pointer(Layer):
 
         # compute the relative position update vector using the samples ids
         # this equals -1 if ids are to the left and +1 if to the right
-        r = tf.gather(inputs.positions, ids, batch_dims=1)
+        R = inputs.relative_positions
+        r = tf.gather(R, ids, batch_dims=1)
         r = tf.squeeze(tf.where(tf.equal(r, 0), -tf.ones_like(r), r), axis=1)
 
         # concatenate the relative position vector to the left and to the
         # bottom of the relative position matrix; see the paper
         # https://arxiv.org/pdf/1902.01370.pdf
-        inputs.positions = tf.concat([
-            tf.concat([inputs.positions, -r[:, :, tf.newaxis]], axis=2),
+        inputs.relative_positions = tf.concat([
+            tf.concat([R, -r[:, :, tf.newaxis]], axis=2),
             tf.pad(r, [[0, 0], [0, 1]])[:, tf.newaxis, :]], axis=1)
 
         # compute the update log probability and note that the pointer network
@@ -278,15 +279,15 @@ class Pointer(Layer):
 
         # compute the relative position update vector using the samples ids
         # this equals -1 if ids are to the left and +1 if to the right
-        positions = select(inputs.positions)
-        r = tf.gather(positions, ids, batch_dims=1)
+        R = select(inputs.relative_positions)
+        r = tf.gather(R, ids, batch_dims=1)
         r = tf.squeeze(tf.where(tf.equal(r, 0), -tf.ones_like(r), r), axis=1)
 
         # concatenate the relative position vector to the left and to the
         # bottom of the relative position matrix; see the paper
         # https://arxiv.org/pdf/1902.01370.pdf
-        inputs.positions = tf.concat([
-            tf.concat([positions, -r[:, :, tf.newaxis]], axis=2),
+        inputs.relative_positions = tf.concat([
+            tf.concat([R, -r[:, :, tf.newaxis]], axis=2),
             tf.pad(r, [[0, 0], [0, 1]])[:, tf.newaxis, :]], axis=1)
 
         # update log probability and note that the pointer network

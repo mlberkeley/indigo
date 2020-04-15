@@ -51,9 +51,12 @@ class DiscreteFeature(Layer):
             same shape as inputs"""
 
         a = position_encoding(tf.shape(inputs.queries)[1], self.hidden_size)
-        inputs.queries = a + self.query_embedding(inputs.queries, **kwargs)
-        b = position_encoding(tf.shape(inputs.values)[1], self.hidden_size)
-        inputs.values = b + self.key_embedding(inputs.values, **kwargs)
+        b = self.query_embedding(inputs.queries, **kwargs)
+        if inputs.absolute_positions is not None:
+            b = tf.matmul(inputs.absolute_positions, b)
+        inputs.queries = a + b
+        c = position_encoding(tf.shape(inputs.values)[1], self.hidden_size)
+        inputs.values = c + self.key_embedding(inputs.values, **kwargs)
         return inputs
 
     def get_config(self):
