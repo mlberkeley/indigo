@@ -4,6 +4,7 @@ from indigo.nn.base.sequence_to_mat import SequenceToMat
 from indigo.nn.base.sinkhorn import Sinkhorn
 from indigo.nn.input import AttentionInput
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 
 class PermutationLayer(Layer):
@@ -14,6 +15,7 @@ class PermutationLayer(Layer):
                  queries_dropout=0.,
                  keys_dropout=0.,
                  iterations=20,
+                 temperature=1.,
                  **kwargs):
         """Creates a Transformer permutation layer by applying a multi
         head sequence to matrix layer; and then applying sinkhorn
@@ -35,7 +37,10 @@ class PermutationLayer(Layer):
             number of units in each attention layer
         iterations: tf.Tensor
             the total number of iterations of the Sinkhorn operator
-            to apply to the data matrix"""
+            to apply to the data matrix
+        temperature: float
+            a positive number to divide the permutation logits by prior
+            to applying sinkhorn normaliozation"""
         super(PermutationLayer, self).__init__()
 
         # the core attention and processing variables
@@ -54,6 +59,7 @@ class PermutationLayer(Layer):
         self.queries_dropout = queries_dropout
         self.keys_dropout = keys_dropout
         self.iterations = iterations
+        self.temperature = temperature
         self.kwargs = kwargs
 
     def call(self, inputs, **kwargs):
@@ -100,7 +106,10 @@ class PermutationLayer(Layer):
 
         # pass the outputs of the attention through a normalization layer
         # that performs sinkhorn normalization
-        return self.sinkhorn(activations, **kwargs)
+        g = tfp.distributions.Gumbel(
+            loc=tf.zeros_like(activations), scale=tf.ones_like(activations))
+        return self.sinkhorn((
+            activations + g.sample()) / self.temperature, **kwargs)
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
@@ -118,6 +127,7 @@ class PermutationLayer(Layer):
                       queries_dropout=self.queries_dropout,
                       keys_dropout=self.keys_dropout,
                       iterations=self.iterations,
+                      temperature=self.temperature,
                       ** self.kwargs)
 
         base_config = super(PermutationLayer, self).get_config()
