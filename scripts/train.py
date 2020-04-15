@@ -1,5 +1,6 @@
 from indigo.core.train import train_faster_rcnn_dataset
 from indigo.nn.transformer import Transformer
+from indigo.nn.permutation_transformer import PermutationTransformer
 from indigo.process.captions import Vocabulary
 import tensorflow as tf
 import argparse
@@ -9,15 +10,15 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--train_folder', type=str, default='tfrecord')
+        '--train_folder', type=str, default='tfrecords')
     parser.add_argument(
-        '--validate_folder', type=str, default='tfrecord')
+        '--validate_folder', type=str, default='tfrecords')
     parser.add_argument(
         '--batch_size', type=int, default=16)
     parser.add_argument(
         '--beam_size', type=int, default=3)
     parser.add_argument(
-        '--vocab_file', type=str, default='vocab.txt')
+        '--vocab_file', type=str, default='train2017_vocab.txt')
     parser.add_argument(
         '--num_epochs', type=int, default=10)
     parser.add_argument(

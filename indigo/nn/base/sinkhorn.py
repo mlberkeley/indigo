@@ -121,7 +121,7 @@ class Sinkhorn(tf.keras.layers.Layer):
             as the transformer attention weights"""
 
         # apply the sinkhorn operator
-        return sinkhorn(inputs, self.iterations)
+        return tf.exp(sinkhorn(inputs, self.iterations))
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

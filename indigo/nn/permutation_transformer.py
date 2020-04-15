@@ -55,7 +55,7 @@ class PermutationTransformer(Sequential):
             to apply to the data matrix
         temperature: float
             a positive number to divide the permutation logits by prior
-            to applying sinkhorn normaliozation"""
+            to applying sinkhorn normalization"""
 
         # TODO: Sequential does not technically support nested inputs
         layers = []
