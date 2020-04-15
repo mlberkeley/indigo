@@ -64,8 +64,8 @@ class Logits(Layer):
             or a pointer network"""
 
         logits = self.call(inputs, **kwargs)
-        return tf.keras.losses.sparse_categorical_crossentropy(
-            inputs.ids, logits, from_logits=True), inputs
+        return tf.keras.losses.categorical_crossentropy(
+            inputs.logits_labels, logits, from_logits=True), inputs
 
     def greedy_search(self,
                       inputs,

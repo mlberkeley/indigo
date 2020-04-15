@@ -6,7 +6,35 @@ import tensorflow as tf
 import os
 
 
-def prepare_batch(batch):
+def absolute_to_relative(permutation):
+    """Converts a permutation matrix to a relative position
+    matrix for training a language model
+
+    Arguments:
+
+    permutation: tf.Tensor
+        a permutation matrix that defines the order in which
+        words are inserted by the language model
+
+    Returns:
+
+    relative: tf.Tensor
+        a ternary matrix that contains relative positions of words
+        inserted by a language model non-sequentially"""
+
+    # this first section will convert the one-hot style indexing to
+    # a ternary indexing where -1 means insert to the right of
+    # and 1 means insert to the left of word x
+    unsorted_relative = tf.math.cumsum(
+        permutation, axis=2, exclusive=True) - tf.math.cumsum(
+            permutation, axis=2, exclusive=True, reverse=True)
+
+    # the second section will sort the matrix of relative positions
+    # so that 'zeros' are on the diagonal
+    return tf.matmul(permutation, unsorted_relative, transpose_a=True)
+
+
+def prepare_batch(batch, vocab_size):
     """Transform a batch dictionary into a dataclass standard format
     for the transformer to process
 
@@ -15,6 +43,9 @@ def prepare_batch(batch):
     batch: dict of tf.Tensors
         a dictionary that contains tensors from a tfrecord dataset;
         this function assumes region-features are used
+    vocab_size: tf.Tensor
+        the number of words in the vocabulary of the model; used in order
+        to calculate labels for the language model logits
 
     Returns:
 
@@ -48,20 +79,19 @@ def prepare_batch(batch):
     inputs = TransformerInput(
         queries=words[:, :-1],
         values=region,
-        queries_mask=tf.greater(token_ind[:, :-1], 0.),
-        values_mask=tf.greater(image_ind, 0.))
+        queries_mask=tf.greater(token_ind[:, :-1], 0),
+        values_mask=tf.greater(image_ind, 0))
 
     # this assignment is necessary for the logits loss
+    inputs.logits_labels = tf.one_hot(words[:, 1:], vocab_size)
     inputs.ids = words[:, 1:]
 
-    # the dataset is not compiled with an encoding so one must
+    # the dataset is not compiled with an ordering so one must
     # be generated on the fly during training; only
     # applies when using a pointer layer; note that we remove the final
     # row and column which corresponds to the end token
-    inp = permutation[:, :-1, :-1]
-    inputs.positions = tf.math.cumsum(
-        inp, axis=2, exclusive=True) - tf.math.cumsum(
-            inp, axis=2, exclusive=True, reverse=True)
+    inputs.pointer_labels = permutation[:, 1:, 1:]
+    inputs.positions = absolute_to_relative(permutation[:, :-1, :-1])
 
     return inputs
 

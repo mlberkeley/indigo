@@ -38,7 +38,7 @@ def prepare_batch(batch):
     # shifting the target sequence
     inputs = TransformerInput(
         values=region,
-        values_mask=tf.greater(image_ind, 0.))
+        values_mask=tf.greater(image_ind, 0))
 
     return inputs
 
