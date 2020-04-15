@@ -31,7 +31,8 @@ def absolute_to_relative(permutation):
 
     # the second section will sort the matrix of relative positions
     # so that 'zeros' are on the diagonal
-    return tf.matmul(permutation, unsorted_relative, transpose_a=True)
+    # TODO: Simon, verify this is not supposed to be transposed
+    return tf.matmul(permutation, unsorted_relative, transpose_b=True)
 
 
 def prepare_batch(batch, vocab_size):
@@ -65,7 +66,7 @@ def prepare_batch(batch, vocab_size):
     # the end token must ALWAYS be decoded last and also the start
     # token must ALWAYS be decoded first
     permutation = tf.eye(tf.shape(words)[1],
-                         batch_shape=tf.shape(words)[:1], dtype=tf.int32)
+                         batch_shape=tf.shape(words)[:1], dtype=tf.float32)
 
     # build a region feature input for the first layer of the model
     region = RegionFeatureInput(features=boxes_features,

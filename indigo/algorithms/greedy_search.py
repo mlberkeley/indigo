@@ -40,6 +40,7 @@ def greedy_search(inputs,
     inputs.queries_mask = tf.fill([batch_size, 1], True)
     inputs.ids = tf.fill([batch_size, 0], 2)
     inputs.relative_positions = tf.fill([batch_size, 1, 1], 0)
+    inputs.absolute_positions = None
     inputs.log_probs = tf.zeros([batch_size])
     inputs.region = inputs.values
 
