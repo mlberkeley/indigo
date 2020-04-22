@@ -113,13 +113,13 @@ def birkhoff_von_neumann(x):
     j = tf.constant(-1)
     d = tf.reduce_all(tf.equal(x, 0), axis=[1, 2])
 
-    while tf.logical_not(tf.reduce_all(d)) and j < 20:
+    while tf.logical_not(tf.reduce_all(d)):
         j = j + 1
 
         p, c = birkhoff_von_neumann_step(x)
+        d = tf.logical_or(d, tf.less(tf.reduce_sum(p, axis=[1, 2]), n))
         p = tf.where(d[:, tf.newaxis, tf.newaxis], tf.zeros_like(p), p)
         c = tf.where(d, tf.zeros_like(c), c)
-
         x = x - c * p
         x = tf.where(tf.less(tf.abs(x), TOLERANCE), tf.zeros_like(x), x)
         d = tf.logical_or(d, tf.reduce_all(tf.equal(x, 0), axis=[1, 2]))
