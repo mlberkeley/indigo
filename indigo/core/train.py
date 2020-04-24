@@ -104,7 +104,8 @@ def train_faster_rcnn_dataset(train_folder,
                               num_epoch,
                               model,
                               model_ckpt,
-                              vocab):
+                              vocab,
+                              use_rl_sinkhorn):
     """Trains a transformer based caption model using features extracted
     using a facter rcnn object detection model
 
@@ -135,7 +136,13 @@ def train_faster_rcnn_dataset(train_folder,
         to be written to when training
     vocab: Vocabulary
         the model vocabulary which contains mappings
-        from words to integers"""
+        from words to integers
+    use_rl_sinkhorn: Bool
+        whether to use a soft-permutation generator network to
+        permute the ground truth caption; the generated ordering is then
+        fed into the pointer network, which views the generated ordering 
+        as the ground truth; 
+        this generator network is trained with policy gradient """
 
     # create a training pipeline
     init_lr = 0.001
