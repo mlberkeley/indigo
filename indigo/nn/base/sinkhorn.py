@@ -1,5 +1,35 @@
 import tensorflow as tf
 
+def matching(matrix_batch):
+    """Solves a matching problem for a batch of matrices.
+    Modified from 
+    https://github.com/google/gumbel_sinkhorn/blob/master/sinkhorn_ops.py
+    
+    This is a wrapper for the scipy.optimize.linear_sum_assignment function. It
+    solves the optimization problem max_P sum_i,j M_i,j P_i,j with P a
+    permutation matrix. Notice the negative sign; the reason, the original
+    function solves a minimization problem
+    Args:
+    matrix_batch: A 3D tensor (a batch of matrices) with
+      shape = [batch_size, N, N]. If 2D, the input is reshaped to 3D with
+      batch_size = 1.
+    Returns:
+    listperms, a 3D integer tensor of permutations with shape [batch_size, N, N]
+      so that listperms[n, :, :] is the permutation matrix P of size N*N that solves the
+      problem  max_P sum_i,j M_i,j P_i,j with M = matrix_batch[n, :, :].
+    """
+
+    def hungarian(x):
+        if x.ndim == 2:
+            x = np.reshape(x, [1, x.shape[0], x.shape[1]])
+        sol = np.zeros((x.shape[0], x.shape[1]), dtype=np.int32)
+        for i in range(x.shape[0]):
+            sol[i, :] = linear_sum_assignment(-x[i, :])[1].astype(np.int32)
+        return sol
+
+    listperms = tf.py_func(hungarian, [matrix_batch], tf.int32) # 2D
+    listperms = tf.one_hot(listperms, tf.shape(listperms)[1], dtype=tf.int32) # 3D
+    return listperms
 
 def sinkhorn_loop_fn(x,
                      step,
