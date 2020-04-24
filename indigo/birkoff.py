@@ -104,7 +104,7 @@ def birkhoff_von_neumann(x):
         a tensor containing the Berkhoff-Von-Neumann coefficients
         found using the Berkhoff-Von-Neumann decomposition"""
 
-    b, n = x.get_shape()[0], tf.cast(tf.shape(x)[2], tf.float32)
+    b, n = tf.shape(x)[0], tf.cast(tf.shape(x)[2], tf.float32)
     x = x * n
 
     coefficients = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
@@ -113,13 +113,17 @@ def birkhoff_von_neumann(x):
     j = tf.constant(-1)
     d = tf.reduce_all(tf.equal(x, 0), axis=[1, 2])
 
+    eye_matrix = tf.eye(tf.shape(x)[2], batch_shape=[b])
+
     while tf.logical_not(tf.reduce_all(d)):
         j = j + 1
 
         p, c = birkhoff_von_neumann_step(x)
         d = tf.logical_or(d, tf.less(tf.reduce_sum(p, axis=[1, 2]), n))
-        p = tf.where(d[:, tf.newaxis, tf.newaxis], tf.zeros_like(p), p)
+
+        p = tf.where(d[:, tf.newaxis, tf.newaxis], eye_matrix, p)
         c = tf.where(d, tf.zeros_like(c), c)
+
         x = x - c * p
         x = tf.where(tf.less(tf.abs(x), TOLERANCE), tf.zeros_like(x), x)
         d = tf.logical_or(d, tf.reduce_all(tf.equal(x, 0), axis=[1, 2]))

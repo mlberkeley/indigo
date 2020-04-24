@@ -146,15 +146,16 @@ class Pointer(Layer):
         # compute the relative position update vector using the samples ids
         # this equals -1 if ids are to the left and +1 if to the right
         R = inputs.relative_positions
+        R = tf.argmax(R, axis=-1, output_type=tf.int32) - 1
         r = tf.gather(R, ids, batch_dims=1, axis=2)
         r = tf.squeeze(tf.where(tf.equal(r, 0), tf.ones_like(r), r), axis=2)
 
         # concatenate the relative position vector to the left and to the
         # bottom of the relative position matrix; see the paper
         # https://arxiv.org/pdf/1902.01370.pdf
-        inputs.relative_positions = tf.concat([
+        inputs.relative_positions = tf.one_hot(tf.concat([
             tf.concat([R, r[:, :, tf.newaxis]], axis=2),
-            tf.pad(-r, [[0, 0], [0, 1]])[:, tf.newaxis, :]], axis=1)
+            tf.pad(-r, [[0, 0], [0, 1]])[:, tf.newaxis, :]], axis=1) + 1, 3)
 
         # compute the update log probability and note that the pointer network
         # does not specify a termination condition by itself
@@ -280,15 +281,16 @@ class Pointer(Layer):
         # compute the relative position update vector using the samples ids
         # this equals -1 if ids are to the left and +1 if to the right
         R = select(inputs.relative_positions)
+        R = tf.argmax(R, axis=-1, output_type=tf.int32) - 1
         r = tf.gather(R, ids, batch_dims=1, axis=2)
         r = tf.squeeze(tf.where(tf.equal(r, 0), tf.ones_like(r), r), axis=2)
 
         # concatenate the relative position vector to the left and to the
         # bottom of the relative position matrix; see the paper
         # https://arxiv.org/pdf/1902.01370.pdf
-        inputs.relative_positions = tf.concat([
+        inputs.relative_positions = tf.one_hot(tf.concat([
             tf.concat([R, r[:, :, tf.newaxis]], axis=2),
-            tf.pad(-r, [[0, 0], [0, 1]])[:, tf.newaxis, :]], axis=1)
+            tf.pad(-r, [[0, 0], [0, 1]])[:, tf.newaxis, :]], axis=1) + 1, 3)
 
         # update log probability and note that the pointer network
         # does not specify a termination condition by itself
