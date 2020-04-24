@@ -100,6 +100,7 @@ class Transformer(Sequential):
 
         # the final layer in the transformer depends on the model purpose
         # to run Transformer-InDIGO select 'indigo'
+        
         if final_layer == 'logits' or final_layer == 'indigo':
             layers.extend([Logits(num_embeddings, **kwargs)])
         if final_layer == 'indigo':

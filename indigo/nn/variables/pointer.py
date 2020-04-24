@@ -30,6 +30,7 @@ class Pointer(Layer):
         logits_per_slot: int
             specifies the number of logits per element the pointer
             network attends to; default is 1"""
+        
         super(Pointer, self).__init__()
 
         # the core processing variables

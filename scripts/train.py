@@ -41,6 +41,8 @@ if __name__ == "__main__":
     parser.add_argument(
         '--final_layer', type=str,
         default='indigo', choices=['indigo', 'logits'])
+    parser.add_argument(
+        '--use_rl_sinkhorn', action='store_true')
     args = parser.parse_args()
 
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:
@@ -48,6 +50,18 @@ if __name__ == "__main__":
                            unknown_word="<unk>",
                            unknown_id=1)
 
+    if args.use_rl_sinkhorn:
+        permutation_generator = PermutationTransformer(vocab.size(),
+                        args.embedding_size,
+                        args.heads,
+                        args.num_layers,
+                        queries_dropout=args.queries_dropout,
+                        keys_dropout=args.keys_dropout,
+                        values_dropout=args.values_dropout,
+                        first_layer=args.first_layer)
+    else:
+        permutation_generator = None
+        
     model = Transformer(vocab.size(),
                         args.embedding_size,
                         args.heads,
@@ -57,7 +71,8 @@ if __name__ == "__main__":
                         values_dropout=args.values_dropout,
                         causal=True,
                         first_layer=args.first_layer,
-                        final_layer=args.final_layer)
+                        final_layer=args.final_layer,
+                        use_rl_sinkhorn=args.use_rl_sinkhorn)
 
     train_faster_rcnn_dataset(args.train_folder,
                               args.validate_folder,
@@ -65,5 +80,7 @@ if __name__ == "__main__":
                               args.beam_size,
                               args.num_epochs,
                               model,
+                              permutation_generator,
                               args.model_ckpt,
-                              vocab)
+                              vocab,
+                              args.use_rl_sinkhorn)

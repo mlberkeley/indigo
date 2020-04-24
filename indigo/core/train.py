@@ -103,6 +103,7 @@ def train_faster_rcnn_dataset(train_folder,
                               beam_size,
                               num_epoch,
                               model,
+                              permutation_generator,
                               model_ckpt,
                               vocab,
                               use_rl_sinkhorn):
@@ -131,18 +132,23 @@ def train_faster_rcnn_dataset(train_folder,
     model: Decoder
         the caption model to be trained; an instance of Transformer that
         returns a data class TransformerInput
+    permutation_generator: Decoder
+        a network that generates soft-permutation to permute the ground-truth
+        caption; implemented when use_rl_sinkhorn == True
     model_ckpt: str
         the path to an existing model checkpoint or the path
         to be written to when training
+    permutation_generator_ckpt: str
+        the path to an existing permutation generator (of class PermutationTransformer) 
+        checkpoint or the path to be written to when training
     vocab: Vocabulary
         the model vocabulary which contains mappings
         from words to integers
-    use_rl_sinkhorn: Bool
-        whether to use a soft-permutation generator network to
-        permute the ground truth caption; the generated ordering is then
-        fed into the pointer network, which views the generated ordering 
-        as the ground truth; 
-        this generator network is trained with policy gradient """
+    use_rl_sinkhorn: bool
+        whether to use a PermutationTransformer to permute the ground truth caption; 
+        the permuted sentence is then fed into the pointer network, which views 
+        the ordering of the permuted sentence as the ground truth; 
+        this generator network is trained with policy gradient"""
 
     # create a training pipeline
     init_lr = 0.001
@@ -200,11 +206,18 @@ def train_faster_rcnn_dataset(train_folder,
     tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
     if tf.io.gfile.exists(model_ckpt + '.index'):
         model.load_weights(model_ckpt)
+    
+    if use_rl_sinkhorn:
+        tf.io.gfile.makedirs(os.path.dirname(permutation_generator_ckpt))
+        if tf.io.gfile.exists(permutation_generator_ckpt + '.index'):
+            permutation_generator.load_weights(permutation_generator_ckpt)
 
     # set up variables for early stopping; only save checkpoints when
     # best validation loss has improved
     best_loss = 999999.0
     var_list = model.trainable_variables
+    if use_rl_sinkhorn:
+        permu_gen_var_list = permutation_generator.trainable_variables
 
     # training for a pre specified number of epochs while also annealing
     # the learning rate linearly towards zero
@@ -249,3 +262,6 @@ def train_faster_rcnn_dataset(train_folder,
         if best_loss > validation_loss:
             best_loss = validation_loss
             model.save_weights(model_ckpt, save_format='tf')
+            if use_rl_sinkhorn:
+                permutation_generator.save_weights(permutation_generator_ckpt, 
+                                                   save_format='tf')
