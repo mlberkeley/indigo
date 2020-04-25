@@ -36,7 +36,11 @@ class Pointer(Layer):
         # the core processing variables
         self.block = Block(
             hidden_size, output_size * (1 + logits_per_slot), **kwargs)
-
+        
+        # this tracks the log probability of inputs.pointer_labels
+        # updated every time the loss is calculated
+        self.label_log_prob = None
+        
         # these parameters need to be stored so that
         # tf.layers.model.save_model works
         self.hidden_size = hidden_size

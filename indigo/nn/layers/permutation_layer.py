@@ -51,7 +51,12 @@ class PermutationLayer(Layer):
         self.block0 = Block(hidden_size // 2,
                             hidden_size * 2,
                             **kwargs)
-
+        # this tracks the batch of activation matrices before 
+        # applying Gumbel noise and doing Sinkhorn 
+        # operation, in order to calculate the prob of a 
+        # permutation matrix using Gumbel-Matching potential
+        self.activations = None
+        
         # these parameters need to be stored so that
         # tf.layers.model.save_model works
         self.hidden_size = hidden_size
@@ -103,7 +108,8 @@ class PermutationLayer(Layer):
         # take the sum over the parallel attention heads
         activations = self.sequence_to_mat(attention_input, **kwargs)
         activations = tf.reduce_sum(activations, axis=1)
-
+        self.activations = activations
+        
         # pass the outputs of the attention through a normalization layer
         # that performs sinkhorn normalization
         g = tfp.distributions.Gumbel(

@@ -2,6 +2,7 @@ from indigo.data.load import faster_rcnn_dataset
 from indigo.nn.input import TransformerInput
 from indigo.nn.input import RegionFeatureInput
 from indigo.algorithms.beam_search import beam_search
+from indigo.nn.base.sinkhorn import matching
 import tensorflow as tf
 import os
 
@@ -35,7 +36,7 @@ def absolute_to_relative(permutation):
     return tf.matmul(permutation, unsorted_relative, transpose_b=True)
 
 
-def prepare_batch(batch, vocab_size):
+def prepare_batch(batch, vocab_size, permutation_generator=None):
     """Transform a batch dictionary into a dataclass standard format
     for the transformer to process
 
@@ -62,12 +63,6 @@ def prepare_batch(batch, vocab_size):
     words = batch["words"]
     token_ind = batch["token_indicators"]
 
-    # this assignment corresponds to left-to-right encoding; note that
-    # the end token must ALWAYS be decoded last and also the start
-    # token must ALWAYS be decoded first
-    permutation = tf.eye(tf.shape(words)[1],
-                         batch_shape=tf.shape(words)[:1], dtype=tf.float32)
-
     # build a region feature input for the first layer of the model
     region = RegionFeatureInput(features=boxes_features,
                                 boxes=boxes,
@@ -86,6 +81,17 @@ def prepare_batch(batch, vocab_size):
     inputs.logits_labels = tf.one_hot(
         words[:, 1:], tf.cast(vocab_size, tf.int32))
 
+    if permutation_generator is None:
+        # this assignment corresponds to left-to-right dncoding; note that
+        # the end token must ALWAYS be decoded last and also the start
+        # token must ALWAYS be decoded first
+        permutation = tf.eye(tf.shape(words)[1],
+                             batch_shape=tf.shape(words)[:1], dtype=tf.float32)
+    else:
+        # use the permutation generator to generate decoding order for the 
+        # ground truth sentence
+        permutation = matching(permutation_generator.call(inputs))
+            
     # the dataset is not compiled with an ordering so one must
     # be generated on the fly during training; only
     # applies when using a pointer layer; note that we remove the final
@@ -134,7 +140,7 @@ def train_faster_rcnn_dataset(train_folder,
         returns a data class TransformerInput
     permutation_generator: Decoder
         a network that generates soft-permutation to permute the ground-truth
-        caption; implemented when use_rl_sinkhorn == True
+        caption; implemented only when use_rl_sinkhorn==True
     model_ckpt: str
         the path to an existing model checkpoint or the path
         to be written to when training
@@ -153,6 +159,8 @@ def train_faster_rcnn_dataset(train_folder,
     # create a training pipeline
     init_lr = 0.001
     optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
+    if use_rl_sinkhorn:
+        permu_gen_optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
     train_dataset = faster_rcnn_dataset(train_folder, batch_size)
     validate_dataset = faster_rcnn_dataset(validate_folder, batch_size)
 
@@ -160,7 +168,7 @@ def train_faster_rcnn_dataset(train_folder,
 
         # process the dataset batch dictionary into the standard
         # model input format
-        inputs = prepare_batch(b, vocab.size())
+        inputs = prepare_batch(b, vocab.size(), permutation_generator)
         token_ind = b['token_indicators']
 
         # calculate the loss function using the transformer model
