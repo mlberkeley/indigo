@@ -26,6 +26,7 @@ def permutation_to_pointer(permutation):
     # make sure the permutation is an int or the below computation
     # does not make sense
     permutation = tf.cast(permutation, tf.int32)
+    n = tf.shape(permutation)[-1]
 
     # this first section will convert the one-hot style indexing to
     # a ternary indexing where -1 means insert to the right of
@@ -41,8 +42,9 @@ def permutation_to_pointer(permutation):
 
     # get the one hot distribution of pointer labels; should contain
     # a sparse lower triangular matrix
-    return tf.one_hot(tf.reduce_sum(tf.maximum(
-        0, sorted_relative), axis=1), tf.shape(permutation)[2])
+    return  tf.one_hot(tf.cast(
+        tf.reduce_sum(tf.maximum(0, tf.linalg.band_part(
+            sorted_relative, 0, -1)), axis=1), tf.int32), n)
 
 
 def permutation_to_relative(permutation):
@@ -199,9 +201,9 @@ def train_faster_rcnn_dataset(train_folder,
         # to relative positions
         inputs.absolute_positions = inputs.permutation[:, :-1, :-1]
         inputs.relative_positions = permutation_to_relative(
-            inputs.permutation[:, :-1, :-1])
+            inputs.permutation)[:, :-1, :-1]
         inputs.pointer_labels = permutation_to_pointer(
-            inputs.permutation[:, 1:, 1:])
+            inputs.permutation)[:, 1:, 1:]
 
         # calculate the loss function using the transformer model
         total_loss, _ = model.loss(inputs, training=True)
