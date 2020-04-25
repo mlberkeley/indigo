@@ -60,19 +60,27 @@ class SequenceToMat(tf.keras.layers.Layer):
         if hasattr(inputs, 'bias') and inputs.bias is not None:
             scores = scores + inputs.bias
 
-        # apply a mask to the scores matrix so that only real elements
-        # are permuted out of place
+        # prevent the model from permuting the <start> and <end> tokens
+        # both have shape like inputs.queries_mask
+        start_or_end_mask = tf.logical_or(
+            tf.equal(inputs.ids, 2), tf.equal(inputs.ids, 3))
+        start_or_end_mask = tf.logical_or(tf.expand_dims(
+            start_or_end_mask, 1), tf.expand_dims(start_or_end_mask, 2))
+
+        # apply a mask to the scores matrix so that only real
+        # non terminal elements are permuted out of place
         mask = tf.expand_dims(inputs.values_mask, -2)
-        mask = tf.logical_and(
-            mask, tf.expand_dims(inputs.queries_mask, -1))
+        mask = tf.logical_and(mask, tf.expand_dims(inputs.queries_mask, -1))
+        mask = tf.logical_and(mask, tf.logical_not(start_or_end_mask))
 
         # pad tokens should not be permuted and logits on the diagonal
         # for pad tokens should not be masked out; this is necessary because
         # a valid permutation matrix has rows and columns that sum to one,
         # even for rows that correspond to pad tokens
-        s = tf.shape(mask)
+        shape = tf.shape(mask)
         mask = tf.logical_or(mask, tf.eye(
-            s[-2], num_columns=s[-1], batch_shape=s[:-2], dtype=tf.bool))
+            shape[-2],
+            num_columns=shape[-1], batch_shape=shape[:-2], dtype=tf.bool))
 
         # apply a boolean mask to the keys and values
         return tf.where(

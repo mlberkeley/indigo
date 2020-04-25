@@ -39,7 +39,7 @@ def greedy_search(inputs,
     inputs.queries = start
     inputs.queries_mask = tf.fill([batch_size, 1], True)
     inputs.ids = tf.fill([batch_size, 0], 2)
-    inputs.relative_positions = tf.fill([batch_size, 1, 1], 0.)
+    inputs.relative_positions = tf.one_hot(tf.fill([batch_size, 1, 1], 1), 3)
     inputs.absolute_positions = None
     inputs.log_probs = tf.zeros([batch_size])
     inputs.region = inputs.values
@@ -66,8 +66,9 @@ def greedy_search(inputs,
     # when the model decodes permutation matrices in additions to ids;
     # then sort ids according to the decoded permutation
     if model.final_layer == 'indigo':
-        pos = tf.cast(inputs.relative_positions[:, 1:, 1:], dtype=tf.int32)
-        pos = tf.reduce_sum(tf.nn.relu(pos), axis=1)
+        pos = inputs.relative_positions
+        pos = tf.argmax(pos, axis=-1, output_type=tf.int32) - 1
+        pos = tf.reduce_sum(tf.nn.relu(pos[:, 1:, 1:]), axis=1)
         pos = tf.one_hot(pos, tf.shape(pos)[1], dtype=tf.int32)
         inputs.ids = tf.squeeze(
             tf.matmul(tf.expand_dims(inputs.ids, 1), pos), 1)

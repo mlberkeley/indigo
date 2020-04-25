@@ -3,11 +3,52 @@ from indigo.nn.input import TransformerInput
 from indigo.nn.input import RegionFeatureInput
 from indigo.algorithms.beam_search import beam_search
 from indigo.nn.base.sinkhorn import matching
+from indigo.birkoff import birkhoff_von_neumann
 import tensorflow as tf
 import os
 
 
-def absolute_to_relative(permutation):
+def permutation_to_pointer(permutation):
+    """Converts a permutation matrix to the label distribution of
+    a pointer network for training a language model
+
+    Arguments:
+
+    permutation: tf.Tensor
+        a permutation matrix that defines the order in which
+        words are inserted by the language model
+
+    Returns:
+
+    pointer: tf.Tensor
+        a ternary matrix that contains relative positions of words
+        inserted by a language model non-sequentially"""
+
+    # make sure the permutation is an int or the below computation
+    # does not make sense
+    permutation = tf.cast(permutation, tf.int32)
+    n = tf.shape(permutation)[-1]
+
+    # this first section will convert the one-hot style indexing to
+    # a ternary indexing where -1 means insert to the right of
+    # and 1 means insert to the left of word x
+    unsorted_relative = -tf.math.cumsum(
+        permutation, axis=-1, exclusive=True) + tf.math.cumsum(
+            permutation, axis=-1, exclusive=True, reverse=True)
+
+    # sort the relative positions into the decoding order induced
+    # by the permutation
+    sorted_relative = tf.matmul(
+        permutation, unsorted_relative, transpose_b=True)
+
+    # get the one hot distribution of pointer labels; should contain
+    # a sparse lower triangular matrix
+    return  tf.one_hot(tf.cast(
+        tf.reduce_sum(tf.maximum(0, tf.linalg.band_part(
+            sorted_relative, 0, -1)), axis=1), tf.int32), n)
+
+
+def permutation_to_relative(permutation):
     """Converts a permutation matrix to a relative position
     matrix for training a language model
 
@@ -23,17 +64,25 @@ def absolute_to_relative(permutation):
         a ternary matrix that contains relative positions of words
         inserted by a language model non-sequentially"""
 
+    # make sure the permutation is an int or the below computation
+    # does not make sense
+    permutation = tf.cast(permutation, tf.int32)
+
     # this first section will convert the one-hot style indexing to
     # a ternary indexing where -1 means insert to the right of
     # and 1 means insert to the left of word x
     unsorted_relative = -tf.math.cumsum(
-        permutation, axis=2, exclusive=True) + tf.math.cumsum(
-            permutation, axis=2, exclusive=True, reverse=True)
+        permutation, axis=-1, exclusive=True) + tf.math.cumsum(
+            permutation, axis=-1, exclusive=True, reverse=True)
 
-    # the second section will sort the matrix of relative positions
-    # so that 'zeros' are on the diagonal
-    # TODO: Simon, verify this is not supposed to be transposed
-    return tf.matmul(permutation, unsorted_relative, transpose_b=True)
+    # sort the relative positions into the decoding order induced
+    # by the permutation
+    sorted_relative = tf.matmul(
+        permutation, unsorted_relative, transpose_b=True)
+
+    # get the one hot distribution of relative positions; contains
+    # a one at location i when [left, center, right]_i
+    return tf.one_hot(sorted_relative + 1, 3)
 
 
 def prepare_batch(batch, vocab_size, permutation_generator=None):
@@ -96,9 +145,7 @@ def prepare_batch(batch, vocab_size, permutation_generator=None):
     # be generated on the fly during training; only
     # applies when using a pointer layer; note that we remove the final
     # row and column which corresponds to the end token
-    inputs.relative_positions = absolute_to_relative(permutation[:, :-1, :-1])
-    inputs.pointer_labels = permutation[:, 1:, 1:]
-    inputs.absolute_positions = permutation[:, :-1, :-1]
+    inputs.permutation = permutation
 
     return inputs
 
@@ -170,6 +217,14 @@ def train_faster_rcnn_dataset(train_folder,
         # model input format
         inputs = prepare_batch(b, vocab.size(), permutation_generator)
         token_ind = b['token_indicators']
+
+        # convert the permutation to label distributions; and
+        # to relative positions
+        inputs.absolute_positions = inputs.permutation[:, :-1, :-1]
+        inputs.relative_positions = permutation_to_relative(
+            inputs.permutation)[:, :-1, :-1]
+        inputs.pointer_labels = permutation_to_pointer(
+            inputs.permutation)[:, 1:, 1:]
 
         # calculate the loss function using the transformer model
         total_loss, _ = model.loss(inputs, training=True)
