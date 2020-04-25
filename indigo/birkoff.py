@@ -124,7 +124,7 @@ def birkhoff_von_neumann(x):
         p = tf.where(d[:, tf.newaxis, tf.newaxis], eye_matrix, p)
         c = tf.where(d, tf.zeros_like(c), c)
 
-        x = x - c * p
+        x = x - c[:, tf.newaxis, tf.newaxis] * p
         x = tf.where(tf.less(tf.abs(x), TOLERANCE), tf.zeros_like(x), x)
         d = tf.logical_or(d, tf.reduce_all(tf.equal(x, 0), axis=[1, 2]))
 

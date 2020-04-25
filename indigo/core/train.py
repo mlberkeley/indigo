@@ -44,7 +44,7 @@ def permutation_to_pointer(permutation):
     # a sparse lower triangular matrix
     return  tf.one_hot(tf.cast(
         tf.reduce_sum(tf.maximum(0, tf.linalg.band_part(
-            sorted_relative, 0, -1)), axis=1), tf.int32), n)
+            sorted_relative, 0, -1)), axis=-2), tf.int32), n)
 
 
 def permutation_to_relative(permutation):
@@ -114,8 +114,8 @@ def prepare_batch(batch, vocab_size):
     # this assignment corresponds to left-to-right encoding; note that
     # the end token must ALWAYS be decoded last and also the start
     # token must ALWAYS be decoded first
-    permutation = tf.eye(tf.shape(words)[1],
-                         batch_shape=tf.shape(words)[:1], dtype=tf.float32)
+    permutation = tf.eye(tf.shape(
+        words)[1], batch_shape=tf.shape(words)[:1], dtype=tf.float32)
 
     # build a region feature input for the first layer of the model
     region = RegionFeatureInput(features=boxes_features,
@@ -197,13 +197,22 @@ def train_faster_rcnn_dataset(train_folder,
         inputs = prepare_batch(b, vocab.size())
         token_ind = b['token_indicators']
 
-        # convert the permutation to label distributions; and
-        # to relative positions
+        # apply the birkhoff-von neumann decomposition to support general
+        # doubly stochastic matrices
+        p, c = birkhoff_von_neumann(inputs.permutation)
+
+        # convert the permutation to absolute positions
         inputs.absolute_positions = inputs.permutation[:, :-1, :-1]
-        inputs.relative_positions = permutation_to_relative(
-            inputs.permutation)[:, :-1, :-1]
-        inputs.pointer_labels = permutation_to_pointer(
-            inputs.permutation)[:, 1:, 1:]
+
+        # convert the permutation to relative positions
+        inputs.relative_positions = tf.reduce_sum(
+            permutation_to_relative(p) * c[
+                ..., tf.newaxis, tf.newaxis, tf.newaxis], axis=1)[:, :-1, :-1, :]
+
+        # convert the permutation to label distributions
+        inputs.pointer_labels = tf.reduce_sum(
+            permutation_to_pointer(p) * c[
+                ..., tf.newaxis, tf.newaxis], axis=1)[:, 1:, 1:]
 
         # calculate the loss function using the transformer model
         total_loss, _ = model.loss(inputs, training=True)
@@ -230,11 +239,11 @@ def train_faster_rcnn_dataset(train_folder,
 
             # show several model predicted sequences and their likelihoods
             for i in range(cap.shape[0]):
-                print("Ground Truth: {}".format(out[i].numpy().decode('utf8')))
+                print("Label: {}".format(out[i].numpy().decode('utf8')))
                 cpa = tf.strings.reduce_join(
                     vocab.ids_to_words(cap)[i], axis=1, separator=' ').numpy()
                 for c, p in zip(cpa, tf.math.exp(log_p)[i].numpy()):
-                    print("[p = {}] Prediction: {}".format(p, c.decode('utf8')))
+                    print("[p = {}] Model: {}".format(p, c.decode('utf8')))
 
         return total_loss
 
