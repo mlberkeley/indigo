@@ -45,7 +45,7 @@ def permutation_to_pointer(permutation):
     # a sparse lower triangular matrix
     return  tf.one_hot(tf.cast(
         tf.reduce_sum(tf.maximum(0, tf.linalg.band_part(
-            sorted_relative, 0, -1)), axis=1), tf.int32), n)
+            sorted_relative, 0, -1)), axis=-2), tf.int32), n)
 
 
 def permutation_to_relative(permutation):
@@ -139,7 +139,7 @@ def prepare_batch(batch, vocab_size, permutation_generator=None):
     else:
         # use the permutation generator to generate decoding order for the 
         # ground truth sentence
-        permutation = matching(permutation_generator.call(inputs))
+        permutation = permutation_generator.call(inputs) # Soft-permutation
             
     # the dataset is not compiled with an ordering so one must
     # be generated on the fly during training; only
@@ -159,7 +159,9 @@ def train_faster_rcnn_dataset(train_folder,
                               permutation_generator,
                               model_ckpt,
                               vocab,
-                              use_rl_sinkhorn):
+                              permutations_per_batch,
+                              use_policy_gradient,
+                              use_birkhoff_von_neumann):
     """Trains a transformer based caption model using features extracted
     using a facter rcnn object detection model
 
@@ -187,7 +189,7 @@ def train_faster_rcnn_dataset(train_folder,
         returns a data class TransformerInput
     permutation_generator: Decoder
         a network that generates soft-permutation to permute the ground-truth
-        caption; implemented only when use_rl_sinkhorn==True
+        caption; None iff args.use_permutation_generator is False
     model_ckpt: str
         the path to an existing model checkpoint or the path
         to be written to when training
@@ -197,16 +199,23 @@ def train_faster_rcnn_dataset(train_folder,
     vocab: Vocabulary
         the model vocabulary which contains mappings
         from words to integers
-    use_rl_sinkhorn: bool
-        whether to use a PermutationTransformer to permute the ground truth caption; 
-        the permuted sentence is then fed into the pointer network, which views 
-        the ordering of the permuted sentence as the ground truth; 
-        this generator network is trained with policy gradient"""
+    permutations_per_batch: int
+        number of permutation matrices to sample for each training data
+    use_policy_gradient: bool
+        whether to use policy gradient to train the permutation_generator;
+        if use_policy_gradient is True, then permutation_generator must not be None
+        if use_birkhoff_von_neumann is False, the probability is determined by the 
+        Gumbel-Matching distribution (i.e. exp(<X,P>_F), see https://arxiv.org/abs/1802.08665);
+        if use_birkhoff_von_neumann is True, then probability is determined by the 
+        weight of Birkhoff Von Neumann decomposition;
+    use_birkhoff_von_neumann: bool
+        whether to use Birkhoff Von Neumann decomposition to get a distribution
+        of hard permutation matrices along with their probability"""
 
     # create a training pipeline
     init_lr = 0.001
     optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
-    if use_rl_sinkhorn:
+    if permutation_generator is not None:
         permu_gen_optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
     train_dataset = faster_rcnn_dataset(train_folder, batch_size)
     validate_dataset = faster_rcnn_dataset(validate_folder, batch_size)
@@ -218,13 +227,25 @@ def train_faster_rcnn_dataset(train_folder,
         inputs = prepare_batch(b, vocab.size(), permutation_generator)
         token_ind = b['token_indicators']
 
-        # convert the permutation to label distributions; and
-        # to relative positions
-        inputs.absolute_positions = inputs.permutation[:, :-1, :-1]
-        inputs.relative_positions = permutation_to_relative(
-            inputs.permutation)[:, :-1, :-1]
-        inputs.pointer_labels = permutation_to_pointer(
-            inputs.permutation)[:, 1:, 1:]
+        if use_birkhoff_von_neumann:
+            # apply the birkhoff-von neumann decomposition to support general
+            # doubly stochastic matrices
+            p, c = birkhoff_von_neumann(inputs.permutation)
+
+            # convert the permutation to absolute positions
+            inputs.absolute_positions = inputs.permutation[:, :-1, :-1]
+
+            # convert the permutation to relative positions
+            inputs.relative_positions = tf.reduce_sum(
+                permutation_to_relative(p) * c[
+                    ..., tf.newaxis, tf.newaxis, tf.newaxis], axis=1)[:, :-1, :-1, :]
+
+            # convert the permutation to label distributions
+            inputs.pointer_labels = tf.reduce_sum(
+                permutation_to_pointer(p) * c[
+                    ..., tf.newaxis, tf.newaxis], axis=1)[:, 1:, 1:]
+        else:
+            
 
         # calculate the loss function using the transformer model
         total_loss, _ = model.loss(inputs, training=True)
@@ -251,11 +272,11 @@ def train_faster_rcnn_dataset(train_folder,
 
             # show several model predicted sequences and their likelihoods
             for i in range(cap.shape[0]):
-                print("Ground Truth: {}".format(out[i].numpy().decode('utf8')))
+                print("Label: {}".format(out[i].numpy().decode('utf8')))
                 cpa = tf.strings.reduce_join(
                     vocab.ids_to_words(cap)[i], axis=1, separator=' ').numpy()
                 for c, p in zip(cpa, tf.math.exp(log_p)[i].numpy()):
-                    print("[p = {}] Prediction: {}".format(p, c.decode('utf8')))
+                    print("[p = {}] Model: {}".format(p, c.decode('utf8')))
 
         return total_loss
 
@@ -270,7 +291,7 @@ def train_faster_rcnn_dataset(train_folder,
     if tf.io.gfile.exists(model_ckpt + '.index'):
         model.load_weights(model_ckpt)
     
-    if use_rl_sinkhorn:
+    if permutation_generator is not None:
         tf.io.gfile.makedirs(os.path.dirname(permutation_generator_ckpt))
         if tf.io.gfile.exists(permutation_generator_ckpt + '.index'):
             permutation_generator.load_weights(permutation_generator_ckpt)
@@ -279,7 +300,7 @@ def train_faster_rcnn_dataset(train_folder,
     # best validation loss has improved
     best_loss = 999999.0
     var_list = model.trainable_variables
-    if use_rl_sinkhorn:
+    if permutation_generator is not None:
         permu_gen_var_list = permutation_generator.trainable_variables
 
     # training for a pre specified number of epochs while also annealing
@@ -325,6 +346,6 @@ def train_faster_rcnn_dataset(train_folder,
         if best_loss > validation_loss:
             best_loss = validation_loss
             model.save_weights(model_ckpt, save_format='tf')
-            if use_rl_sinkhorn:
+            if permutation_generator is not None:
                 permutation_generator.save_weights(permutation_generator_ckpt, 
                                                    save_format='tf')

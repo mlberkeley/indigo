@@ -42,15 +42,26 @@ if __name__ == "__main__":
         '--final_layer', type=str,
         default='indigo', choices=['indigo', 'logits'])
     parser.add_argument(
-        '--use_rl_sinkhorn', action='store_true')
+        '--use_permutation_generator', action='store_true')
+    parser.add_argument(
+        '--permutations_per_batch', type=int, default=1)
+    parser.add_argument(
+        '--use_policy_gradient', action='store_true')
+    parser.add_argument(
+        '--use_birkhoff_von_neumann', action='store_true')
     args = parser.parse_args()
 
+    if args.use_policy_gradient:
+        assert args.use_permutation_generator
+    if args.permutations_per_batch > 1:
+        assert args.use_policy_gradient
+        
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:
         vocab = Vocabulary([x.strip() for x in f.readlines()],
                            unknown_word="<unk>",
                            unknown_id=1)
 
-    if args.use_rl_sinkhorn:
+    if args.use_permutation_generator:
         permutation_generator = PermutationTransformer(vocab.size(),
                         args.embedding_size,
                         args.heads,
@@ -71,8 +82,7 @@ if __name__ == "__main__":
                         values_dropout=args.values_dropout,
                         causal=True,
                         first_layer=args.first_layer,
-                        final_layer=args.final_layer,
-                        use_rl_sinkhorn=args.use_rl_sinkhorn)
+                        final_layer=args.final_layer)
 
     train_faster_rcnn_dataset(args.train_folder,
                               args.validate_folder,
@@ -83,4 +93,6 @@ if __name__ == "__main__":
                               permutation_generator,
                               args.model_ckpt,
                               vocab,
-                              args.use_rl_sinkhorn)
+                              args.permutations_per_batch,
+                              args.use_policy_gradient,
+                              args.use_birkhoff_von_neumann)
