@@ -48,12 +48,14 @@ if __name__ == "__main__":
     parser.add_argument(
         '--use_policy_gradient', action='store_true')
     parser.add_argument(
+        '--entropy_coeff', type=float, default=0.)
+    parser.add_argument(
         '--use_birkhoff_von_neumann', action='store_true')
     args = parser.parse_args()
 
     if args.use_policy_gradient:
         assert args.use_permutation_generator
-    if args.permutations_per_batch > 1:
+    if args.permutations_per_batch > 1 or args.entropy_coeff > 0.0:
         assert args.use_policy_gradient
         
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:
@@ -95,4 +97,5 @@ if __name__ == "__main__":
                               vocab,
                               args.permutations_per_batch,
                               args.use_policy_gradient,
+                              entropy_coeff,
                               args.use_birkhoff_von_neumann)

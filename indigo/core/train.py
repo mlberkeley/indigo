@@ -5,7 +5,12 @@ from indigo.algorithms.beam_search import beam_search
 from indigo.nn.base.sinkhorn import matching
 from indigo.birkoff import birkhoff_von_neumann
 import tensorflow as tf
+import tensorflow_probability as tfp
+import numpy as np
 import os
+
+
+np.set_printoptions(threshold=np.inf)
 
 
 def permutation_to_pointer(permutation):
@@ -138,15 +143,33 @@ def prepare_batch(batch, vocab_size, permutation_generator=None):
                              batch_shape=tf.shape(words)[:1], dtype=tf.float32)
     else:
         # use the permutation generator to generate decoding order for the 
-        # ground truth sentence
-        permutation = permutation_generator.call(inputs) # Soft-permutation
+        # ground truth sentence;
+        # this is overwritten later if use_policy_gradient==True and 
+        # use_birkhoff_von_neumann==False, because in this case
+        # we have to generate multiple soft permutations for each training
+        # sample and obtain hard permutations
+        permutation = permutation_generator.call(inputs) # Soft-permutation from Sinkhorn operator
             
+    """ Some references
+    # this assignment corresponds to left-to-right encoding; note that
+    # the end token must ALWAYS be decoded last and also the start
+    # token must ALWAYS be decoded first
+    left_to_right = tf.tile(tf.range(
+        tf.shape(words)[1])[tf.newaxis], [tf.shape(words)[0], 1])
+    
     # the dataset is not compiled with an ordering so one must
     # be generated on the fly during training; only
     # applies when using a pointer layer; note that we remove the final
     # row and column which corresponds to the end token
+    right_to_left = tf.tile(tf.range(
+        tf.shape(words)[1] - 1)[tf.newaxis], [tf.shape(words)[0], 1])
+    right_to_left = tf.reverse_sequence(right_to_left, tf.cast(
+        tf.reduce_sum(token_ind, axis=1), tf.int32) - 2, seq_axis=1, batch_axis=0)
+    right_to_left = tf.concat([
+        tf.fill([tf.shape(words)[0], 1], 0), 1 + right_to_left], axis=1)
+    inputs.permutation = tf.one_hot(right_to_left, tf.shape(words)[1])
+    """
     inputs.permutation = permutation
-
     return inputs
 
 
@@ -161,6 +184,7 @@ def train_faster_rcnn_dataset(train_folder,
                               vocab,
                               permutations_per_batch,
                               use_policy_gradient,
+                              entropy_coeff,
                               use_birkhoff_von_neumann):
     """Trains a transformer based caption model using features extracted
     using a facter rcnn object detection model
@@ -207,7 +231,10 @@ def train_faster_rcnn_dataset(train_folder,
         if use_birkhoff_von_neumann is False, the probability is determined by the 
         Gumbel-Matching distribution (i.e. exp(<X,P>_F), see https://arxiv.org/abs/1802.08665);
         if use_birkhoff_von_neumann is True, then probability is determined by the 
-        weight of Birkhoff Von Neumann decomposition;
+        weight of Birkhoff Von Neumann decomposition
+    entropy_coeff: float
+        the entropy regularization coefficient for policy gradient, if 
+        use_policy_gradient==True
     use_birkhoff_von_neumann: bool
         whether to use Birkhoff Von Neumann decomposition to get a distribution
         of hard permutation matrices along with their probability"""
@@ -215,12 +242,16 @@ def train_faster_rcnn_dataset(train_folder,
     # create a training pipeline
     init_lr = 0.001
     optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
-    if permutation_generator is not None:
+    if use_policy_gradient:
         permu_gen_optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
     train_dataset = faster_rcnn_dataset(train_folder, batch_size)
     validate_dataset = faster_rcnn_dataset(validate_folder, batch_size)
 
-    def loss_function(it, b, decode=False, verbose=False):
+    # this loss function is applied if we are not using policy gradient, 
+    # or if we are using policy gradient and we are sampling from Birkhoff 
+    # von Neumann distribution; in these two cases, the permutation probability 
+    # normalizing factor equals to 1    
+    def loss_function_no_prob_normalization_init(it, b, verbose=False):
 
         # process the dataset batch dictionary into the standard
         # model input format
@@ -228,37 +259,65 @@ def train_faster_rcnn_dataset(train_folder,
         token_ind = b['token_indicators']
 
         if use_birkhoff_von_neumann:
-            # apply the birkhoff-von neumann decomposition to support general
+            # apply the Birkhoff-von Neumann decomposition to support general
             # doubly stochastic matrices
-            p, c = birkhoff_von_neumann(inputs.permutation)
-
+            permus, distribs = birkhoff_von_neumann(inputs.permutation)
+            
+        # this applies when we are not using policy gradient and not using
+        # Birkhoff-von Neumann decomposition (e.g. left-to-right decoding)
+        # or if we are not using policy gradient and using 
+        if not use_policy_gradient:
             # convert the permutation to absolute positions
             inputs.absolute_positions = inputs.permutation[:, :-1, :-1]
 
             # convert the permutation to relative positions
             inputs.relative_positions = tf.reduce_sum(
-                permutation_to_relative(p) * c[
+                permutation_to_relative(permus) * distribs[
                     ..., tf.newaxis, tf.newaxis, tf.newaxis], axis=1)[:, :-1, :-1, :]
 
             # convert the permutation to label distributions
             inputs.pointer_labels = tf.reduce_sum(
-                permutation_to_pointer(p) * c[
+                permutation_to_pointer(permus) * distribs[
                     ..., tf.newaxis, tf.newaxis], axis=1)[:, 1:, 1:]
+            inputs.logits_labels = tf.matmul(
+                inputs.permutation[:, 1:, 1:], inputs.logits_labels)        
         else:
+            # construct categorical distribution over the distribution
+            # of hard-permutation matrices according to 
+            # Birkhoff-von Neumann decomposition
+            tfp_distribs = tfp.distributions.Categorical(probs=distribs)
+
+        def loss_function():
             
-
-        # calculate the loss function using the transformer model
-        total_loss, _ = model.loss(inputs, training=True)
-        total_loss = tf.reduce_sum(total_loss * token_ind[:, :-1], axis=1)
-        total_loss = total_loss / tf.reduce_sum(token_ind[:, :-1], axis=1)
-        total_loss = tf.reduce_mean(total_loss)
-        if verbose:
-            print('It: {} Train Loss: {}'.format(it, total_loss))
-
+            # Sampling from Birkhoff Von Neumann distribution if we are
+            # using policy gradient
+            if use_policy_gradient:
+                indices = tfp_distribs.sample()
+                row_indices = tf.range(tf.shape(indices)[0])
+                full_indices = tf.stack([row_indices, indices], axis=1)
+                distribs_selected = tf.reshape(tf.gather_nd(distribs, full_indices), (-1,1))
+                permus_selected = tf.gather_nd(permus, full_indices)
+                inputs.absolute_positions = permus_selected[:, :-1, :-1]
+                inputs.relative_positions = permutation_to_relative(
+                    permus_selected)[:, :-1, :-1]
+                inputs.pointer_labels = permutation_to_pointer(
+                    permus_selected)[:, 1:, 1:]
+                inputs.logits_labels = tf.matmul(
+                    permus_selected[:, 1:, 1:], inputs.logits_labels)  
+                
+                
+            # calculate the loss function using the transformer model
+            total_loss, _ = model.loss(inputs, training=True)
+            total_loss = tf.reduce_sum(total_loss * token_ind[:, :-1], axis=1)
+            total_loss = total_loss / tf.reduce_sum(token_ind[:, :-1], axis=1)
+            total_loss = tf.reduce_mean(total_loss)
+            if verbose:
+                print('It: {} Train Loss: {}'.format(it, total_loss))
+            
         # occasionally do some extra processing during training
         # such as printing the labels and model predictions
-        if decode:
-
+        def decode():
+            
             # process the dataset batch dictionary into the standard
             # model input format
             inputs = prepare_batch(b, vocab.size())
@@ -270,6 +329,8 @@ def train_faster_rcnn_dataset(train_folder,
             cap, log_p = beam_search(
                 inputs, model, beam_size=beam_size, max_iterations=20)
 
+            print(tf.argmax(inputs.relative_positions, axis=-1)[0] - 1)
+
             # show several model predicted sequences and their likelihoods
             for i in range(cap.shape[0]):
                 print("Label: {}".format(out[i].numpy().decode('utf8')))
@@ -278,7 +339,14 @@ def train_faster_rcnn_dataset(train_folder,
                 for c, p in zip(cpa, tf.math.exp(log_p)[i].numpy()):
                     print("[p = {}] Model: {}".format(p, c.decode('utf8')))
 
-        return total_loss
+        return loss_function, decode
+    
+    # this loss function is applied only if we are using policy gradient 
+    # and if we are not sampling from Birkhoff von Neumann distribution; 
+    # in this case, for each training data, we need to sample multiple
+    # hard permutation matrices in order to obtain an approximation
+    # of the distribution of permutation matrices with potential
+    # proportional to exp(<X,P>_F)
 
     # run an initial forward pass using the model in order to build the
     # weights and define the shapes at every layer
