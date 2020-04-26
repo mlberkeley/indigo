@@ -133,26 +133,64 @@ def prepare_batch(batch, vocab_size):
     inputs.logits_labels = tf.one_hot(
         words[:, 1:], tf.cast(vocab_size, tf.int32))
 
-    # this assignment corresponds to left-to-right encoding; note that
-    # the end token must ALWAYS be decoded last and also the start
-    # token must ALWAYS be decoded first
-    left_to_right = tf.tile(tf.range(
-        tf.shape(words)[1])[tf.newaxis], [tf.shape(words)[0], 1])
+    return inputs
+
+
+def prepare_permutation(inputs,
+                        mask,
+                        order):
+    """Transform a batch dictionary into a dataclass standard format
+    for the transformer to process
+
+    Arguments:
+
+    inputs: TransformerInput
+        the input to be passed into a transformer model with attributes
+        necessary for also computing the loss function
+    mask: tf.Tensor
+        the binary mask for the full training example, including both
+        the start and end tokens (input_length + 1)
+    order: str
+        the autoregressive ordering to train Transformer-InDIGO using;
+        l2r or r2l for now, will support soft orders later"""
 
     # the dataset is not compiled with an ordering so one must
-    # be generated on the fly during training; only
-    # applies when using a pointer layer; note that we remove the final
-    # row and column which corresponds to the end token
-    right_to_left = tf.tile(tf.range(
-        tf.shape(words)[1] - 1)[tf.newaxis], [tf.shape(words)[0], 1])
-    right_to_left = tf.reverse_sequence(right_to_left, tf.cast(
-        tf.reduce_sum(token_ind, axis=1), tf.int32) - 2, seq_axis=1, batch_axis=0)
-    right_to_left = tf.concat([
-        tf.fill([tf.shape(words)[0], 1], 0), 1 + right_to_left], axis=1)
+    # be generated on the fly during training; only applies
+    # when using a pointer layer; note that the end token
+    # must always be last and start token must always  be first
+    if order == 'r2l':  # corresponds to right-to-left decoding
+        ind = tf.tile(tf.range(tf.shape(
+            mask)[1] - 1)[tf.newaxis], [tf.shape(mask)[0], 1])
+        ind = tf.reverse_sequence(ind, tf.cast(tf.reduce_sum(
+            mask, axis=1), tf.int32) - 2, seq_axis=1, batch_axis=0)
+        ind = tf.concat([tf.fill([
+            tf.shape(mask)[0], 1], 0), 1 + ind], axis=1)
 
-    inputs.permutation = tf.one_hot(right_to_left, tf.shape(words)[1])
+    if order == 'l2r':  # corresponds to left-to-right decoding
+        ind = tf.tile(tf.range(tf.shape(
+            mask)[1])[tf.newaxis], [tf.shape(mask)[0], 1])
 
-    return inputs
+    # convert permutation indices into a matrix
+    inputs.permutation = tf.one_hot(ind, tf.shape(mask)[1])
+
+    # apply the birkhoff-von neumann decomposition to support general
+    # doubly stochastic matrices
+    p, c = birkhoff_von_neumann(inputs.permutation)
+
+    # convert the permutation to absolute positions
+    inputs.absolute_positions = inputs.permutation[:, :-1, :-1]
+
+    # convert the permutation to relative positions
+    inputs.relative_positions = tf.reduce_sum(
+        permutation_to_relative(p) * c[
+            ..., tf.newaxis, tf.newaxis, tf.newaxis], axis=1)[:, :-1, :-1, :]
+
+    # convert the permutation to label distributions
+    inputs.pointer_labels = tf.reduce_sum(
+        permutation_to_pointer(p) * c[
+            ..., tf.newaxis, tf.newaxis], axis=1)[:, 1:, 1:]
+    inputs.logits_labels = tf.matmul(
+        inputs.permutation[:, 1:, 1:], inputs.logits_labels)
 
 
 def train_faster_rcnn_dataset(train_folder,
@@ -162,6 +200,7 @@ def train_faster_rcnn_dataset(train_folder,
                               num_epoch,
                               model,
                               model_ckpt,
+                              order,
                               vocab):
     """Trains a transformer based caption model using features extracted
     using a facter rcnn object detection model
@@ -191,6 +230,9 @@ def train_faster_rcnn_dataset(train_folder,
     model_ckpt: str
         the path to an existing model checkpoint or the path
         to be written to when training
+    order: str
+        the autoregressive ordering to train Transformer-InDIGO using;
+        l2r or r2l for now, will support soft orders later
     vocab: Vocabulary
         the model vocabulary which contains mappings
         from words to integers"""
@@ -206,34 +248,16 @@ def train_faster_rcnn_dataset(train_folder,
         # process the dataset batch dictionary into the standard
         # model input format
         inputs = prepare_batch(b, vocab.size())
-        token_ind = b['token_indicators']
-
-        # apply the birkhoff-von neumann decomposition to support general
-        # doubly stochastic matrices
-        p, c = birkhoff_von_neumann(inputs.permutation)
-
-        # convert the permutation to absolute positions
-        inputs.absolute_positions = inputs.permutation[:, :-1, :-1]
-
-        # convert the permutation to relative positions
-        inputs.relative_positions = tf.reduce_sum(
-            permutation_to_relative(p) * c[
-                ..., tf.newaxis, tf.newaxis, tf.newaxis], axis=1)[:, :-1, :-1, :]
-
-        # convert the permutation to label distributions
-        inputs.pointer_labels = tf.reduce_sum(
-            permutation_to_pointer(p) * c[
-                ..., tf.newaxis, tf.newaxis], axis=1)[:, 1:, 1:]
-        inputs.logits_labels = tf.matmul(
-            inputs.permutation[:, 1:, 1:], inputs.logits_labels)
+        mask = b['token_indicators']
+        prepare_permutation(inputs, mask, order)
 
         # calculate the loss function using the transformer model
-        total_loss, _ = model.loss(inputs, training=True)
-        total_loss = tf.reduce_sum(total_loss * token_ind[:, :-1], axis=1)
-        total_loss = total_loss / tf.reduce_sum(token_ind[:, :-1], axis=1)
-        total_loss = tf.reduce_mean(total_loss)
+        loss, _ = model.loss(inputs, training=True)
+        loss = tf.reduce_sum(loss * mask[:, :-1], axis=1)
+        loss = loss / tf.reduce_sum(mask[:, :-1], axis=1)
+        loss = tf.reduce_mean(loss)
         if verbose:
-            print('It: {} Train Loss: {}'.format(it, total_loss))
+            print('It: {} Train Loss: {}'.format(it, loss))
 
         # occasionally do some extra processing during training
         # such as printing the labels and model predictions
@@ -249,16 +273,16 @@ def train_faster_rcnn_dataset(train_folder,
                 vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
             cap, log_p = beam_search(
                 inputs, model, beam_size=beam_size, max_iterations=20)
+            cap = tf.strings.reduce_join(
+                vocab.ids_to_words(cap), axis=2, separator=' ')
 
             # show several model predicted sequences and their likelihoods
             for i in range(cap.shape[0]):
                 print("Label: {}".format(out[i].numpy().decode('utf8')))
-                cpa = tf.strings.reduce_join(
-                    vocab.ids_to_words(cap)[i], axis=1, separator=' ').numpy()
-                for c, p in zip(cpa, tf.math.exp(log_p)[i].numpy()):
+                for c, p in zip(cap[i].numpy(), tf.math.exp(log_p)[i].numpy()):
                     print("[p = {}] Model: {}".format(p, c.decode('utf8')))
 
-        return total_loss
+        return loss
 
     # run an initial forward pass using the model in order to build the
     # weights and define the shapes at every layer

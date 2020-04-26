@@ -41,6 +41,9 @@ if __name__ == "__main__":
     parser.add_argument(
         '--final_layer', type=str,
         default='indigo', choices=['indigo', 'logits'])
+    parser.add_argument(
+        '--order', type=str,
+        default='l2r', choices=['l2r', 'r2l'])
     args = parser.parse_args()
 
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:
@@ -66,4 +69,5 @@ if __name__ == "__main__":
                               args.num_epochs,
                               model,
                               args.model_ckpt,
+                              args.order,
                               vocab)
