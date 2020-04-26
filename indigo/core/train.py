@@ -46,7 +46,7 @@ def permutation_to_pointer(permutation):
 
     # get the one hot distribution of pointer labels; should contain
     # a sparse lower triangular matrix
-    return  tf.one_hot(tf.cast(
+    return tf.one_hot(tf.cast(
         tf.reduce_sum(tf.maximum(0, tf.linalg.band_part(
             sorted_relative, 0, -1)), axis=-2), tf.int32), n)
 
@@ -249,8 +249,6 @@ def train_faster_rcnn_dataset(train_folder,
                 vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
             cap, log_p = beam_search(
                 inputs, model, beam_size=beam_size, max_iterations=20)
-
-            print(tf.argmax(inputs.relative_positions, axis=-1)[0] - 1)
 
             # show several model predicted sequences and their likelihoods
             for i in range(cap.shape[0]):

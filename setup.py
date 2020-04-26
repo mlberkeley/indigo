@@ -8,6 +8,7 @@ REQUIRED_PACKAGES = ['tensorflow==2.1',
                      'torchvision',
                      'numpy',
                      'nltk',
+                     'networkx',
                      'dm-tree',
                      'matplotlib']
 
