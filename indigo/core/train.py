@@ -4,7 +4,11 @@ from indigo.nn.input import RegionFeatureInput
 from indigo.algorithms.beam_search import beam_search
 from indigo.birkoff import birkhoff_von_neumann
 import tensorflow as tf
+import numpy as np
 import os
+
+
+np.set_printoptions(threshold=np.inf)
 
 
 def permutation_to_pointer(permutation):
@@ -111,12 +115,6 @@ def prepare_batch(batch, vocab_size):
     words = batch["words"]
     token_ind = batch["token_indicators"]
 
-    # this assignment corresponds to left-to-right encoding; note that
-    # the end token must ALWAYS be decoded last and also the start
-    # token must ALWAYS be decoded first
-    permutation = tf.eye(tf.shape(
-        words)[1], batch_shape=tf.shape(words)[:1], dtype=tf.float32)
-
     # build a region feature input for the first layer of the model
     region = RegionFeatureInput(features=boxes_features,
                                 boxes=boxes,
@@ -135,11 +133,24 @@ def prepare_batch(batch, vocab_size):
     inputs.logits_labels = tf.one_hot(
         words[:, 1:], tf.cast(vocab_size, tf.int32))
 
+    # this assignment corresponds to left-to-right encoding; note that
+    # the end token must ALWAYS be decoded last and also the start
+    # token must ALWAYS be decoded first
+    left_to_right = tf.tile(tf.range(
+        tf.shape(words)[1])[tf.newaxis], [tf.shape(words)[0], 1])
+
     # the dataset is not compiled with an ordering so one must
     # be generated on the fly during training; only
     # applies when using a pointer layer; note that we remove the final
     # row and column which corresponds to the end token
-    inputs.permutation = permutation
+    right_to_left = tf.tile(tf.range(
+        tf.shape(words)[1] - 1)[tf.newaxis], [tf.shape(words)[0], 1])
+    right_to_left = tf.reverse_sequence(right_to_left, tf.cast(
+        tf.reduce_sum(token_ind, axis=1), tf.int32) - 2, seq_axis=1, batch_axis=0)
+    right_to_left = tf.concat([
+        tf.fill([tf.shape(words)[0], 1], 0), 1 + right_to_left], axis=1)
+
+    inputs.permutation = tf.one_hot(right_to_left, tf.shape(words)[1])
 
     return inputs
 
@@ -213,6 +224,8 @@ def train_faster_rcnn_dataset(train_folder,
         inputs.pointer_labels = tf.reduce_sum(
             permutation_to_pointer(p) * c[
                 ..., tf.newaxis, tf.newaxis], axis=1)[:, 1:, 1:]
+        inputs.logits_labels = tf.matmul(
+            inputs.permutation[:, 1:, 1:], inputs.logits_labels)
 
         # calculate the loss function using the transformer model
         total_loss, _ = model.loss(inputs, training=True)
@@ -236,6 +249,8 @@ def train_faster_rcnn_dataset(train_folder,
                 vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
             cap, log_p = beam_search(
                 inputs, model, beam_size=beam_size, max_iterations=20)
+
+            print(tf.argmax(inputs.relative_positions, axis=-1)[0] - 1)
 
             # show several model predicted sequences and their likelihoods
             for i in range(cap.shape[0]):
