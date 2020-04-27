@@ -1,5 +1,0 @@
---embedding_size 256 \
---heads 4 \
---num_layers 2 \
---first_layer region \
---final_layer indigo \
