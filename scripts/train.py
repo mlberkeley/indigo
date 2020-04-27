@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--num_epochs', type=int, default=10)
     parser.add_argument(
-        '--model_ckpt', type=str, default='ckpt/indigo_l2r')
+        '--model_ckpt', type=str, default='ckpt/nsds')
     parser.add_argument(
         '--embedding_size', type=int, default=256)
     parser.add_argument(
@@ -43,7 +43,9 @@ if __name__ == "__main__":
         default='indigo', choices=['indigo', 'logits'])
     parser.add_argument(
         '--order', type=str,
-        default='l2r', choices=['l2r', 'r2l', 'soft'])
+        default='soft', choices=['l2r', 'r2l', 'soft'])
+    parser.add_argument(
+        '--iterations', type=int, default=10000)
     args = parser.parse_args()
 
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:
@@ -71,8 +73,7 @@ if __name__ == "__main__":
                                        keys_dropout=args.keys_dropout,
                                        values_dropout=args.values_dropout,
                                        first_layer=args.first_layer,
-                                       iterations=20,
-                                       temperature=1.)
+                                       iterations=args.iterations)
 
     train_faster_rcnn_dataset(args.train_folder,
                               args.validate_folder,

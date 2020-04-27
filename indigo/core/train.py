@@ -346,6 +346,21 @@ def train_faster_rcnn_dataset(train_folder,
 
         return loss
 
+    def validate():
+
+        # keep track of the validation loss
+        denom = 0.0
+        epoch_loss = 0.0
+
+        # accumulate the validation loss across the entire dataset
+        # normalize the validation loss per validation example
+        for batch in validate_dataset:
+            n = tf.cast(tf.shape(batch['words'])[0], tf.float32)
+            denom += n
+            epoch_loss += loss_function(
+                0, batch, decode=False, verbose=False) * n
+        return epoch_loss / denom
+
     # run an initial forward pass using the model in order to build the
     # weights and define the shapes at every layer
     for batch in train_dataset.take(1):
@@ -361,7 +376,7 @@ def train_faster_rcnn_dataset(train_folder,
 
     # set up variables for early stopping; only save checkpoints when
     # best validation loss has improved
-    best_loss = 999999.0
+    best_loss = validate()
     var_list = model.trainable_variables
     if isinstance(order, tf.keras.Model):
         var_list = var_list + order.trainable_variables
@@ -387,21 +402,8 @@ def train_faster_rcnn_dataset(train_folder,
         # anneal the model learning rate after an epoch
         optim.lr.assign(init_lr * (1 - (epoch + 1) / num_epoch))
 
-        # keep track of the validation loss
-        validation_loss = 0.0
-        denom = 0.0
-
-        # loop through the entire dataset once (one epoch)
-        for batch in validate_dataset:
-
-            # accumulate the validation loss across the entire dataset
-            n = tf.cast(tf.shape(batch['words'])[0], tf.float32)
-            validation_loss += loss_function(
-                iteration, batch, decode=False, verbose=False) * n
-            denom += n
-
         # normalize the validation loss per validation example
-        validation_loss = validation_loss / denom
+        validation_loss = validate()
         print('It: {} Val Loss: {}'.format(iteration, validation_loss))
 
         # save once at the end of every epoch; but only save when
