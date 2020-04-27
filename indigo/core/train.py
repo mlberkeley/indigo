@@ -348,18 +348,14 @@ def train_faster_rcnn_dataset(train_folder,
 
     def validate():
 
-        # keep track of the validation loss
-        denom = 0.0
-        epoch_loss = 0.0
-
         # accumulate the validation loss across the entire dataset
-        # normalize the validation loss per validation example
-        for batch in validate_dataset:
-            n = tf.cast(tf.shape(batch['words'])[0], tf.float32)
-            denom += n
-            epoch_loss += loss_function(
-                0, batch, decode=False, verbose=False) * n
-        return epoch_loss / denom
+        # weight the loss by the batch size and normalize
+        # the loss to an expected value
+        denom, loss = 0.0, 0.0
+        for b in validate_dataset:
+            n = tf.cast(tf.shape(b['words'])[0], tf.float32)
+            denom, loss = denom + n, loss + n * loss_function(0, b)
+        return loss / denom
 
     # run an initial forward pass using the model in order to build the
     # weights and define the shapes at every layer
