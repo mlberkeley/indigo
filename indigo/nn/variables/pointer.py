@@ -108,8 +108,10 @@ class Pointer(Layer):
             or a pointer network"""
 
         pointer = self.call(inputs, **kwargs)
-        return tf.keras.losses.categorical_crossentropy(
-            inputs.pointer_labels, pointer, from_logits=True), inputs
+        loss = tf.keras.losses.categorical_crossentropy(
+               inputs.pointer_labels, pointer, from_logits=True)  
+        self.label_log_prob = -tf.reduce_sum(loss, axis=1)
+        return loss, inputs
 
     def greedy_search(self,
                       inputs,
