@@ -12,6 +12,39 @@ import os
 
 np.set_printoptions(threshold=np.inf)
 
+class RunningMeanStd(object):
+    # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
+    def __init__(self, epsilon=1e-4, shape=()):
+        self.mean = tf.zeros(shape)
+        self.var = tf.ones(shape)
+        self.count = epsilon
+
+    def update(self, x):
+        batch_mean = tf.reduce_mean(x, axis=0)
+        batch_var = tf.reduce_std(x, axis=0) ** 2
+        # We don't want gradient to propagate back through self.mean and self.var
+        batch_mean = tf.stop_gradient(batch_mean)
+        batch_var = tf.stop_gradient(batch_var)
+        batch_count = x.shape[0]
+        self.update_from_moments(batch_mean, batch_var, batch_count)
+
+    def update_from_moments(self, batch_mean, batch_var, batch_count):
+        self.mean, self.var, self.count = uopdate_mean_var_count_from_moments(
+            self.mean, self.var, self.count, batch_mean, batch_var, batch_count)
+
+# Helper function to update running mean std        
+def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, batch_count):
+    delta = batch_mean - mean
+    tot_count = count + batch_count
+
+    new_mean = mean + delta * batch_count / tot_count
+    m_a = var * count
+    m_b = batch_var * batch_count
+    M2 = m_a + m_b + tf.square(delta) * count * batch_count / tot_count
+    new_var = M2 / tot_count
+    new_count = tot_count
+
+    return new_mean, new_var, new_count
 
 def permutation_to_pointer(permutation):
     """Converts a permutation matrix to the label distribution of
@@ -48,7 +81,7 @@ def permutation_to_pointer(permutation):
 
     # get the one hot distribution of pointer labels; should contain
     # a sparse lower triangular matrix
-    return  tf.one_hot(tf.cast(
+    return tf.one_hot(tf.cast(
         tf.reduce_sum(tf.maximum(0, tf.linalg.band_part(
             sorted_relative, 0, -1)), axis=-2), tf.int32), n)
 
@@ -90,7 +123,7 @@ def permutation_to_relative(permutation):
     return tf.one_hot(sorted_relative + 1, 3)
 
 
-def prepare_batch(batch, vocab_size, permutation_generator=None):
+def prepare_batch(batch, vocab_size, baseline_order, permutation_generator=None):
     """Transform a batch dictionary into a dataclass standard format
     for the transformer to process
 
@@ -102,6 +135,11 @@ def prepare_batch(batch, vocab_size, permutation_generator=None):
     vocab_size: tf.Tensor
         the number of words in the vocabulary of the model; used in order
         to calculate labels for the language model logits
+    baseline_order: str
+        the baseline ordering (l2r or r2l) to use, if permutation_generator is None
+    permutation_generator: PermutationTransformer
+        the PermutationTransformer that generates soft permutation from
+        ground truth sentence
 
     Returns:
 
@@ -139,8 +177,20 @@ def prepare_batch(batch, vocab_size, permutation_generator=None):
         # this assignment corresponds to left-to-right dncoding; note that
         # the end token must ALWAYS be decoded last and also the start
         # token must ALWAYS be decoded first
-        permutation = tf.eye(tf.shape(words)[1],
-                             batch_shape=tf.shape(words)[:1], dtype=tf.float32)
+        if baseline_order == 'r2l':  # corresponds to right-to-left decoding
+            ind = tf.tile(tf.range(tf.shape(
+                token_ind)[1] - 1)[tf.newaxis], [tf.shape(token_ind)[0], 1])
+            ind = tf.reverse_sequence(ind, tf.cast(tf.reduce_sum(
+                token_ind, axis=1), tf.int32) - 2, seq_axis=1, batch_axis=0)
+            ind = tf.concat([tf.fill([
+                tf.shape(token_ind)[0], 1], 0), 1 + ind], axis=1)
+
+        if baseline_order == 'l2r':  # corresponds to left-to-right decoding
+            ind = tf.tile(tf.range(tf.shape(
+                token_ind)[1])[tf.newaxis], [tf.shape(token_ind)[0], 1])
+
+        # convert permutation indices into a matrix
+        inputs.permutation = tf.one_hot(ind, tf.shape(token_ind)[1])
     else:
         # use the permutation generator to generate decoding order for the 
         # ground truth sentence;
@@ -149,43 +199,25 @@ def prepare_batch(batch, vocab_size, permutation_generator=None):
         # we have to generate multiple soft permutations for each training
         # sample and obtain hard permutations
         permutation = permutation_generator.call(inputs) # Soft-permutation from Sinkhorn operator
-            
-    """ Some references
-    # this assignment corresponds to left-to-right encoding; note that
-    # the end token must ALWAYS be decoded last and also the start
-    # token must ALWAYS be decoded first
-    left_to_right = tf.tile(tf.range(
-        tf.shape(words)[1])[tf.newaxis], [tf.shape(words)[0], 1])
-    
-    # the dataset is not compiled with an ordering so one must
-    # be generated on the fly during training; only
-    # applies when using a pointer layer; note that we remove the final
-    # row and column which corresponds to the end token
-    right_to_left = tf.tile(tf.range(
-        tf.shape(words)[1] - 1)[tf.newaxis], [tf.shape(words)[0], 1])
-    right_to_left = tf.reverse_sequence(right_to_left, tf.cast(
-        tf.reduce_sum(token_ind, axis=1), tf.int32) - 2, seq_axis=1, batch_axis=0)
-    right_to_left = tf.concat([
-        tf.fill([tf.shape(words)[0], 1], 0), 1 + right_to_left], axis=1)
-    inputs.permutation = tf.one_hot(right_to_left, tf.shape(words)[1])
-    """
-    inputs.permutation = permutation
+        inputs.permutation = permutation
+        
     return inputs
-
 
 def train_faster_rcnn_dataset(train_folder,
                               validate_folder,
                               batch_size,
                               beam_size,
                               num_epoch,
+                              baseline_order,
+                              vocab,
                               model,
                               permutation_generator,
                               model_ckpt,
-                              vocab,
                               permutations_per_batch,
                               use_policy_gradient,
                               entropy_coeff,
                               use_birkhoff_von_neumann):
+    
     """Trains a transformer based caption model using features extracted
     using a facter rcnn object detection model
 
@@ -208,6 +240,14 @@ def train_faster_rcnn_dataset(train_folder,
     num_epochs: int
         the number of loops through the entire dataset to
         make before termination
+    baseline_order: str
+        the autoregressive ordering to train Transformer-InDIGO using
+        l2r or r2l; if permutation_generator is None, this baseline order
+        is applied, otherwise the ordering is given by the output
+        of permutation_generator
+    vocab: Vocabulary
+        the model vocabulary which contains mappings
+        from words to integers
     model: Decoder
         the caption model to be trained; an instance of Transformer that
         returns a data class TransformerInput
@@ -215,14 +255,8 @@ def train_faster_rcnn_dataset(train_folder,
         a network that generates soft-permutation to permute the ground-truth
         caption; None iff args.use_permutation_generator is False
     model_ckpt: str
-        the path to an existing model checkpoint or the path
-        to be written to when training
-    permutation_generator_ckpt: str
-        the path to an existing permutation generator (of class PermutationTransformer) 
-        checkpoint or the path to be written to when training
-    vocab: Vocabulary
-        the model vocabulary which contains mappings
-        from words to integers
+        the path to an existing model (Transformer + PermutationTransformer) checkpoint 
+        or the path to be written to when training
     permutations_per_batch: int
         number of permutation matrices to sample for each training data
     use_policy_gradient: bool
@@ -244,6 +278,7 @@ def train_faster_rcnn_dataset(train_folder,
     optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
     if use_policy_gradient:
         permu_gen_optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
+        reward_normalizer = RunningMeanStd()
     train_dataset = faster_rcnn_dataset(train_folder, batch_size)
     validate_dataset = faster_rcnn_dataset(validate_folder, batch_size)
 
@@ -303,16 +338,15 @@ def train_faster_rcnn_dataset(train_folder,
                 inputs.pointer_labels = permutation_to_pointer(
                     permus_selected)[:, 1:, 1:]
                 inputs.logits_labels = tf.matmul(
-                    permus_selected[:, 1:, 1:], inputs.logits_labels)  
-                
+                    permus_selected[:, 1:, 1:], inputs.logits_labels)              
                 
             # calculate the loss function using the transformer model
-            total_loss, _ = model.loss(inputs, training=True)
-            total_loss = tf.reduce_sum(total_loss * token_ind[:, :-1], axis=1)
-            total_loss = total_loss / tf.reduce_sum(token_ind[:, :-1], axis=1)
-            total_loss = tf.reduce_mean(total_loss)
+            decoder_loss, _ = model.loss(inputs, training=True)
+            decoder_loss = tf.reduce_sum(decoder_loss * token_ind[:, :-1], axis=1)
+            decoder_loss = decoder_loss / tf.reduce_sum(token_ind[:, :-1], axis=1)
+            decoder_loss = tf.reduce_mean(decoder_loss)
             if verbose:
-                print('It: {} Train Loss: {}'.format(it, total_loss))
+                print('It: {} Train Loss: {}'.format(it, decoder_loss))
             
         # occasionally do some extra processing during training
         # such as printing the labels and model predictions
@@ -328,15 +362,13 @@ def train_faster_rcnn_dataset(train_folder,
                 vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
             cap, log_p = beam_search(
                 inputs, model, beam_size=beam_size, max_iterations=20)
-
-            print(tf.argmax(inputs.relative_positions, axis=-1)[0] - 1)
+            cap = tf.strings.reduce_join(
+                vocab.ids_to_words(cap), axis=2, separator=' ')
 
             # show several model predicted sequences and their likelihoods
             for i in range(cap.shape[0]):
                 print("Label: {}".format(out[i].numpy().decode('utf8')))
-                cpa = tf.strings.reduce_join(
-                    vocab.ids_to_words(cap)[i], axis=1, separator=' ').numpy()
-                for c, p in zip(cpa, tf.math.exp(log_p)[i].numpy()):
+                for c, p in zip(cap[i].numpy(), tf.math.exp(log_p)[i].numpy()):
                     print("[p = {}] Model: {}".format(p, c.decode('utf8')))
 
         return loss_function, decode
@@ -347,6 +379,9 @@ def train_faster_rcnn_dataset(train_folder,
     # hard permutation matrices in order to obtain an approximation
     # of the distribution of permutation matrices with potential
     # proportional to exp(<X,P>_F)
+    def loss_function_with_prob_normalization_init(it, b, verbose=False):
+        # TODO
+        raise NotImplementedError
 
     # run an initial forward pass using the model in order to build the
     # weights and define the shapes at every layer
@@ -360,9 +395,8 @@ def train_faster_rcnn_dataset(train_folder,
         model.load_weights(model_ckpt)
     
     if permutation_generator is not None:
-        tf.io.gfile.makedirs(os.path.dirname(permutation_generator_ckpt))
-        if tf.io.gfile.exists(permutation_generator_ckpt + '.index'):
-            permutation_generator.load_weights(permutation_generator_ckpt)
+        if tf.io.gfile.exists(model_ckpt + '.order.index'):
+            permutation_generator.load_weights(model_ckpt + '.order')
 
     # set up variables for early stopping; only save checkpoints when
     # best validation loss has improved
@@ -415,5 +449,5 @@ def train_faster_rcnn_dataset(train_folder,
             best_loss = validation_loss
             model.save_weights(model_ckpt, save_format='tf')
             if permutation_generator is not None:
-                permutation_generator.save_weights(permutation_generator_ckpt, 
+                permutation_generator.save_weights(model_ckpt + '.order', 
                                                    save_format='tf')

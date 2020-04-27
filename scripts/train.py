@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--num_epochs', type=int, default=10)
     parser.add_argument(
-        '--model_ckpt', type=str, default='ckpt/indigo_l2r')
+        '--model_ckpt', type=str, default='ckpt/nsds')
     parser.add_argument(
         '--embedding_size', type=int, default=256)
     parser.add_argument(
@@ -51,9 +51,13 @@ if __name__ == "__main__":
         '--entropy_coeff', type=float, default=0.)
     parser.add_argument(
         '--use_birkhoff_von_neumann', action='store_true')
+    parser.add_argument(
+        '--baseline_order', type=str,
+        default='l2r', choices=['l2r', 'r2l'])
+    
     args = parser.parse_args()
 
-    if args.use_policy_gradient:
+    if args.use_policy_gradient or args.use_birkhoff_von_neumann:
         assert args.use_permutation_generator
     if args.permutations_per_batch > 1 or args.entropy_coeff > 0.0:
         assert args.use_policy_gradient
@@ -91,11 +95,12 @@ if __name__ == "__main__":
                               args.batch_size,
                               args.beam_size,
                               args.num_epochs,
+                              args.baseline_order,
+                              vocab,
                               model,
                               permutation_generator,
                               args.model_ckpt,
-                              vocab,
                               args.permutations_per_batch,
                               args.use_policy_gradient,
-                              entropy_coeff,
+                              args.entropy_coeff,
                               args.use_birkhoff_von_neumann)
