@@ -88,7 +88,7 @@ def permutation_to_relative(permutation):
     return tf.one_hot(sorted_relative + 1, 3)
 
 
-def prepare_batch(batch, vocab_size):
+def prepare_batch_for_lm(batch):
     """Transform a batch dictionary into a dataclass standard format
     for the transformer to process
 
@@ -128,31 +128,86 @@ def prepare_batch(batch, vocab_size):
         queries_mask=tf.greater(token_ind[:, :-1], 0),
         values_mask=tf.greater(image_ind, 0))
 
-    # this assignment is necessary for the logits loss
+    # this assignment is necessary for the pointer after logits layer
+    # used in Transformer-InDIGO
     inputs.ids = words[:, 1:]
-    inputs.logits_labels = tf.one_hot(
-        words[:, 1:], tf.cast(vocab_size, tf.int32))
 
     return inputs
 
 
-def prepare_permutation(inputs,
-                        mask,
+def prepare_batch_for_pt(batch):
+    """Transform a batch dictionary into a dataclass standard format
+    for the transformer to process
+
+    Arguments:
+
+    batch: dict of tf.Tensors
+        a dictionary that contains tensors from a tfrecord dataset;
+        this function assumes region-features are used
+    vocab_size: tf.Tensor
+        the number of words in the vocabulary of the model; used in order
+        to calculate labels for the language model logits
+
+    Returns:
+
+    inputs: TransformerInput
+        the input to be passed into a transformer model with attributes
+        necessary for also computing the loss function"""
+
+    # select all relevant features from the batch dictionary
+    image_ind = batch["image_indicators"]
+    boxes_features = batch["boxes_features"]
+    boxes = batch["boxes"]
+    detections = batch["labels"]
+    words = batch["words"]
+
+    # build a region feature input for the first layer of the model
+    region = RegionFeatureInput(features=boxes_features,
+                                boxes=boxes,
+                                detections=detections)
+
+    start_end_or_pad = tf.logical_or(tf.equal(
+        words, 0), tf.logical_or(tf.equal(words, 2), tf.equal(words, 3)))
+
+    # build the inputs to the transformer model by left
+    # shifting the target sequence
+    inputs = TransformerInput(
+        queries=words,
+        values=region,
+        queries_mask=tf.logical_not(start_end_or_pad),
+        values_mask=tf.greater(image_ind, 0))
+
+    return inputs
+
+
+def prepare_permutation(batch,
+                        vocab_size,
                         order):
     """Transform a batch dictionary into a dataclass standard format
     for the transformer to process
 
     Arguments:
 
+    batch: dict of tf.Tensors
+        a dictionary that contains tensors from a tfrecord dataset;
+        this function assumes region-features are used
+    vocab_size: tf.Tensor
+        the number of words in the vocabulary of the model; used in order
+        to calculate labels for the language model logits
+    order: str or callable
+        the autoregressive ordering to train Transformer-InDIGO using;
+        l2r or r2l for now, will support soft orders later
+
+    Returns:
+
     inputs: TransformerInput
         the input to be passed into a transformer model with attributes
-        necessary for also computing the loss function
-    mask: tf.Tensor
-        the binary mask for the full training example, including both
-        the start and end tokens (input_length + 1)
-    order: str
-        the autoregressive ordering to train Transformer-InDIGO using;
-        l2r or r2l for now, will support soft orders later"""
+        necessary for also computing the loss function"""
+
+    # process the dataset batch dictionary into the standard
+    # model input format
+    inputs = prepare_batch_for_lm(batch)
+    mask = batch['token_indicators']
 
     # the dataset is not compiled with an ordering so one must
     # be generated on the fly during training; only applies
@@ -170,8 +225,13 @@ def prepare_permutation(inputs,
         ind = tf.tile(tf.range(tf.shape(
             mask)[1])[tf.newaxis], [tf.shape(mask)[0], 1])
 
-    # convert permutation indices into a matrix
-    inputs.permutation = tf.one_hot(ind, tf.shape(mask)[1])
+    if order == 'r2l' or order == 'l2r':
+        inputs.permutation = tf.one_hot(ind, tf.shape(mask)[1])
+
+    # pass the training example through the permutation transformer
+    # to obtain a doubly stochastic matrix
+    if isinstance(order, tf.keras.Model):  # corresponds to soft orderings
+        inputs.permutation = order(prepare_batch_for_pt(batch))
 
     # apply the birkhoff-von neumann decomposition to support general
     # doubly stochastic matrices
@@ -190,7 +250,10 @@ def prepare_permutation(inputs,
         permutation_to_pointer(p) * c[
             ..., tf.newaxis, tf.newaxis], axis=1)[:, 1:, 1:]
     inputs.logits_labels = tf.matmul(
-        inputs.permutation[:, 1:, 1:], inputs.logits_labels)
+        inputs.permutation[:, 1:, 1:], tf.one_hot(
+            inputs.ids, tf.cast(vocab_size, tf.int32)))
+
+    return inputs
 
 
 def train_faster_rcnn_dataset(train_folder,
@@ -247,9 +310,8 @@ def train_faster_rcnn_dataset(train_folder,
 
         # process the dataset batch dictionary into the standard
         # model input format
-        inputs = prepare_batch(b, vocab.size())
+        inputs = prepare_permutation(b, vocab.size(), order)
         mask = b['token_indicators']
-        prepare_permutation(inputs, mask, order)
 
         # calculate the loss function using the transformer model
         loss, _ = model.loss(inputs, training=True)
@@ -265,7 +327,7 @@ def train_faster_rcnn_dataset(train_folder,
 
             # process the dataset batch dictionary into the standard
             # model input format
-            inputs = prepare_batch(b, vocab.size())
+            inputs = prepare_batch_for_lm(b)
 
             # calculate the ground truth sequence for this batch; and
             # perform beam search using the current model
@@ -299,6 +361,8 @@ def train_faster_rcnn_dataset(train_folder,
     # best validation loss has improved
     best_loss = 999999.0
     var_list = model.trainable_variables
+    if isinstance(order, tf.keras.Model):
+        var_list = var_list + order.trainable_variables
 
     # training for a pre specified number of epochs while also annealing
     # the learning rate linearly towards zero
