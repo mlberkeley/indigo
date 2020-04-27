@@ -459,7 +459,7 @@ def train_faster_rcnn_dataset(train_folder,
                 else:
                     optim.minimize(lambda: decoder_loss, var_list)                    
             
-            if iteration % 100 == 0:
+            if iteration % (100 // permutations_per_batch) == 0:
                 decode()
                 
             # increment the number of training steps so far; note this
@@ -481,8 +481,14 @@ def train_faster_rcnn_dataset(train_folder,
 
             # accumulate the validation loss across the entire dataset
             n = tf.cast(tf.shape(batch['words'])[0], tf.float32)
-            validation_loss += loss_function(
-                iteration, batch, decode=False, verbose=False) * n
+            if use_policy_gradient and not use_birkhoff_von_neumann:
+                loss_function, decode = \
+                loss_function_with_prob_normalization_init(iteration, batch, verbose=False)
+            else:
+                loss_function, decode = \
+                loss_function_no_prob_normalization_init(iteration, batch, verbose=False)    
+            decoder_loss, permutation_loss = loss_function()
+            validation_loss += decoder_loss * n
             denom += n
 
         # normalize the validation loss per validation example
