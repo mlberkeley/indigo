@@ -356,6 +356,8 @@ def train_faster_rcnn_dataset(train_folder,
     tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
     if tf.io.gfile.exists(model_ckpt + '.index'):
         model.load_weights(model_ckpt)
+    if tf.io.gfile.exists(model_ckpt + '.order.index'):
+        order.load_weights(model_ckpt + '.order')
 
     # set up variables for early stopping; only save checkpoints when
     # best validation loss has improved
@@ -407,3 +409,5 @@ def train_faster_rcnn_dataset(train_folder,
         if best_loss > validation_loss:
             best_loss = validation_loss
             model.save_weights(model_ckpt, save_format='tf')
+            if isinstance(order, tf.keras.Model):
+                order.save_weights(model_ckpt + '.order')

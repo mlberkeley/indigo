@@ -52,7 +52,8 @@ class DiscreteFeature(Layer):
 
         a = position_encoding(tf.shape(inputs.queries)[1], self.hidden_size)
         b = self.query_embedding(inputs.queries, **kwargs)
-        if inputs.absolute_positions is not None:
+        if hasattr(inputs, 'absolute_positions') and \
+                inputs.absolute_positions is not None:
             b = tf.matmul(inputs.absolute_positions, b)
         inputs.queries = a + b
         c = position_encoding(tf.shape(inputs.values)[1], self.hidden_size)

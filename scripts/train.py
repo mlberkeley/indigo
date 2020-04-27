@@ -43,7 +43,7 @@ if __name__ == "__main__":
         default='indigo', choices=['indigo', 'logits'])
     parser.add_argument(
         '--order', type=str,
-        default='l2r', choices=['l2r', 'r2l'])
+        default='l2r', choices=['l2r', 'r2l', 'soft'])
     args = parser.parse_args()
 
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:
@@ -62,6 +62,18 @@ if __name__ == "__main__":
                         first_layer=args.first_layer,
                         final_layer=args.final_layer)
 
+    if args.order == 'soft':
+        order = PermutationTransformer(vocab.size(),
+                                       args.embedding_size,
+                                       args.heads,
+                                       args.num_layers,
+                                       queries_dropout=args.queries_dropout,
+                                       keys_dropout=args.keys_dropout,
+                                       values_dropout=args.values_dropout,
+                                       first_layer=args.first_layer,
+                                       iterations=20,
+                                       temperature=1.)
+
     train_faster_rcnn_dataset(args.train_folder,
                               args.validate_folder,
                               args.batch_size,
@@ -69,5 +81,5 @@ if __name__ == "__main__":
                               args.num_epochs,
                               model,
                               args.model_ckpt,
-                              args.order,
+                              order if args.order == 'soft' else args.order,
                               vocab)
