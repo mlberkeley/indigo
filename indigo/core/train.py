@@ -395,7 +395,7 @@ def train_faster_rcnn_dataset(train_folder,
             
             # process the dataset batch dictionary into the standard
             # model input format
-            inputs = prepare_batch_for_lm(b)
+            inputs, _ = prepare_batch(b, vocab.size(), None)
 
             # calculate the ground truth sequence for this batch; and
             # perform beam search using the current model
@@ -424,17 +424,6 @@ def train_faster_rcnn_dataset(train_folder,
         # TODO
         raise NotImplementedError
 
-    def validate():
-
-        # accumulate the validation loss across the entire dataset
-        # weight the loss by the batch size and normalize
-        # the loss to an expected value
-        denom, loss = 0.0, 0.0
-        for b in validate_dataset:
-            n = tf.cast(tf.shape(b['words'])[0], tf.float32)
-            denom, loss = denom + n, loss + n * loss_function(0, b)
-        return loss / denom
-
     # run an initial forward pass using the model in order to build the
     # weights and define the shapes at every layer
     for batch in train_dataset.take(1):
@@ -457,7 +446,7 @@ def train_faster_rcnn_dataset(train_folder,
 
     # set up variables for early stopping; only save checkpoints when
     # best validation loss has improved
-    best_loss = validate()
+    best_loss = 999999.0
     var_list = model.trainable_variables
     if permutation_generator is not None:
         permu_gen_var_list = permutation_generator.trainable_variables
@@ -521,7 +510,7 @@ def train_faster_rcnn_dataset(train_folder,
             denom += n
 
         # normalize the validation loss per validation example
-        validation_loss = validate()
+        validation_loss = validation_loss / denom
         print('It: {} Val Loss: {}'.format(iteration, validation_loss))
 
         # save once at the end of every epoch; but only save when
