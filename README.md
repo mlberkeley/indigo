@@ -73,10 +73,10 @@ The dataset has been created, and you can start training.
 
 ## Training
 
-You may train several kinds of models using our framework. For example, you can replicate our results and train a non-sequential left-to-right Transformer-InDIGO model using the following command in the terminal.
+You may train several kinds of models using our framework. For example, you can replicate our results and train a non-sequential soft-autoregressive Transformer-InDIGO model using the following command in the terminal.
 
 ```bash
-python scripts/train.py --train_folder ~/train2017_tfrecords --validate_folder ~/val2017_tfrecords --batch_size 32 --beam_size 1 --vocab_file train2017_vocab.txt --num_epochs 10 --model_ckpt ckpt/decoder --embedding_size 256 --heads 4 --num_layers 2 --first_layer region --final_layer indigo
+python scripts/train.py --train_folder ~/train2017_tfrecords --validate_folder ~/val2017_tfrecords --batch_size 32 --beam_size 1 --vocab_file train2017_vocab.txt --num_epochs 10 --model_ckpt ckpt/nsds --embedding_size 256 --heads 4 --num_layers 2 --first_layer region --final_layer indigo --order soft --iterations 10000
 ```
 
 ## Validation
@@ -84,5 +84,5 @@ python scripts/train.py --train_folder ~/train2017_tfrecords --validate_folder ~
 You may evaluate a trained model with the following command. If you are not able to install the `nlg-eval` package, the following command will still run and print captions for the validation set, but it will not calculate evaluation metrics.
 
 ```bash
-python scripts/validate.py --validate_folder ~/val2017_tfrecords --ref_folder ~/captions_val2017 --batch_size 32 --beam_size 1 --vocab_file train2017_vocab.txt --model_ckpt ckpt/decoder --embedding_size 256 --heads 4 --num_layers 2 --first_layer region --final_layer indigo
+python scripts/validate.py --validate_folder ~/val2017_tfrecords --ref_folder ~/captions_val2017 --batch_size 32 --beam_size 1 --vocab_file train2017_vocab.txt --model_ckpt ckpt/nsds --embedding_size 256 --heads 4 --num_layers 2 --first_layer region --final_layer indigo
 ```

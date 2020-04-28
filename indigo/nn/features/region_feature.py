@@ -58,7 +58,8 @@ class RegionFeature(Layer):
             inputs.values.boxes, y], 2), **kwargs)
         a = position_encoding(tf.shape(inputs.queries)[1], self.hidden_size)
         b = self.word_embedding(inputs.queries, **kwargs)
-        if inputs.absolute_positions is not None:
+        if hasattr(inputs, 'absolute_positions') and \
+                inputs.absolute_positions is not None:
             b = tf.matmul(inputs.absolute_positions, b)
         inputs.queries = a + b
         return inputs

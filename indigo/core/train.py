@@ -123,6 +123,7 @@ def permutation_to_relative(permutation):
     return tf.one_hot(sorted_relative + 1, 3)
 
 def prepare_batch(batch, vocab_size, permutation_generator=None):
+    
     """Transform a batch dictionary into a dataclass standard format
     for the transformer to process
 
@@ -167,7 +168,8 @@ def prepare_batch(batch, vocab_size, permutation_generator=None):
         queries_mask=tf.greater(token_ind[:, :-1], 0),
         values_mask=tf.greater(image_ind, 0))
 
-    # this assignment is necessary for the logits loss
+    # this assignment is necessary for the pointer after logits layer
+    # used in Transformer-InDIGO
     inputs.ids = words[:, 1:]
     inputs.logits_labels = tf.one_hot(
         words[:, 1:], tf.cast(vocab_size, tf.int32))
@@ -387,14 +389,13 @@ def train_faster_rcnn_dataset(train_folder,
             else:
                 return decoder_loss, None
                 
-            
         # occasionally do some extra processing during training
         # such as printing the labels and model predictions
         def decode():
             
             # process the dataset batch dictionary into the standard
             # model input format
-            inputs = prepare_batch(b, vocab.size())
+            inputs = prepare_batch_for_lm(b)
 
             # calculate the ground truth sequence for this batch; and
             # perform beam search using the current model
@@ -423,6 +424,17 @@ def train_faster_rcnn_dataset(train_folder,
         # TODO
         raise NotImplementedError
 
+    def validate():
+
+        # accumulate the validation loss across the entire dataset
+        # weight the loss by the batch size and normalize
+        # the loss to an expected value
+        denom, loss = 0.0, 0.0
+        for b in validate_dataset:
+            n = tf.cast(tf.shape(b['words'])[0], tf.float32)
+            denom, loss = denom + n, loss + n * loss_function(0, b)
+        return loss / denom
+
     # run an initial forward pass using the model in order to build the
     # weights and define the shapes at every layer
     for batch in train_dataset.take(1):
@@ -439,14 +451,13 @@ def train_faster_rcnn_dataset(train_folder,
     tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
     if tf.io.gfile.exists(model_ckpt + '.index'):
         model.load_weights(model_ckpt)
-    
     if permutation_generator is not None:
         if tf.io.gfile.exists(model_ckpt + '.order.index'):
             permutation_generator.load_weights(model_ckpt + '.order')
 
     # set up variables for early stopping; only save checkpoints when
     # best validation loss has improved
-    best_loss = 999999.0
+    best_loss = validate()
     var_list = model.trainable_variables
     if permutation_generator is not None:
         permu_gen_var_list = permutation_generator.trainable_variables
@@ -510,7 +521,7 @@ def train_faster_rcnn_dataset(train_folder,
             denom += n
 
         # normalize the validation loss per validation example
-        validation_loss = validation_loss / denom
+        validation_loss = validate()
         print('It: {} Val Loss: {}'.format(iteration, validation_loss))
 
         # save once at the end of every epoch; but only save when

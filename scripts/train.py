@@ -54,7 +54,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--baseline_order', type=str,
         default='l2r', choices=['l2r', 'r2l'])
-    
+
     args = parser.parse_args()
 
     if args.use_policy_gradient or args.use_birkhoff_von_neumann:
