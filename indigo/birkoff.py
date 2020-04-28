@@ -24,10 +24,10 @@ def get_permutation_np(bipartite_matrix):
 
     n = bipartite_matrix.shape[1] // 2
     matches = maximum_matching(from_numpy_matrix(bipartite_matrix), range(n))
-    matches = np.array([[u, v % n] for u, v in matches.items() if u < n])
+    matches = {u: v % n for u, v in matches.items() if u < n}
 
     permutation = np.zeros((n, n), dtype=np.float32)
-    permutation[(matches[:, 0], matches[:, 1])] = 1
+    permutation[tuple(zip(*(matches.items())))] = 1
     return permutation
 
 
