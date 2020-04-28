@@ -323,4 +323,3 @@ class Pointer(Layer):
         base_config = super(Pointer, self).get_config()
         return dict(list(base_config.items()) +
                     list(config.items()))
->>>>>>> 73eb33f347f2ea6f5a58731fcbe103ee266cd07c

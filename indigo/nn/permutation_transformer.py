@@ -99,14 +99,14 @@ class PermutationTransformer(Sequential):
             iterations=iterations,
             temperature=temperature, **kwargs)])
         
+        # initialize using parent class
+        super(PermutationTransformer, self).__init__(layers)
+
         # store the pointer to permutation layer so that we can later get 
         # its activation matrices before applying Gumbel noise and doing
         # Sinkhorn operation
         self.permutation_layer = layers[-1]
         
-        # initialize using parent class
-        super(PermutationTransformer, self).__init__(layers)
-
         # these parameters need to be stored so that
         # tf.layers.model.save_model works
         self.num_embeddings = num_embeddings

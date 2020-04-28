@@ -122,8 +122,7 @@ def permutation_to_relative(permutation):
     # a one at location i when [left, center, right]_i
     return tf.one_hot(sorted_relative + 1, 3)
 
-
-def prepare_batch(batch, vocab_size):
+def prepare_batch(batch, vocab_size, permutation_generator=None):
     """Transform a batch dictionary into a dataclass standard format
     for the transformer to process
 
@@ -172,8 +171,22 @@ def prepare_batch(batch, vocab_size):
     inputs.ids = words[:, 1:]
     inputs.logits_labels = tf.one_hot(
         words[:, 1:], tf.cast(vocab_size, tf.int32))
+    
+    if permutation_generator is None:
+        return inputs, None
+    else:
+        start_end_or_pad = tf.logical_or(tf.equal(
+        words, 0), tf.logical_or(tf.equal(words, 2), tf.equal(words, 3)))
+
+        # build the inputs to the transformer model by left
+        # shifting the target sequence
+        permu_inputs = TransformerInput(
+            queries=words,
+            values=region,
+            queries_mask=tf.logical_not(start_end_or_pad),
+            values_mask=tf.greater(image_ind, 0))
         
-    return inputs
+        return inputs, permu_inputs
 
 def train_faster_rcnn_dataset(train_folder,
                               validate_folder,
@@ -262,7 +275,7 @@ def train_faster_rcnn_dataset(train_folder,
            
         # process the dataset batch dictionary into the standard
         # model input format
-        inputs = prepare_batch(b, vocab.size())
+        inputs, permu_inputs = prepare_batch(b, vocab.size(), permutation_generator)
         token_ind = b['token_indicators']
 
         def loss_function():
@@ -287,13 +300,18 @@ def train_faster_rcnn_dataset(train_folder,
             else:
                 # use the permutation generator to generate soft-permutation 
                 # for the ground truth sentence;
-                permutation = permutation_generator.call(inputs) # Soft-permutation from Sinkhorn operator
+                permutation = permutation_generator.call(permu_inputs) # Soft-permutation from Sinkhorn operator
                 inputs.permutation = permutation
 
-            if use_birkhoff_von_neumann:
-                # apply the Birkhoff-von Neumann decomposition to support general
-                # doubly stochastic matrices
-                permus, distribs = birkhoff_von_neumann(inputs.permutation)
+            # apply the Birkhoff-von Neumann decomposition to support general
+            # doubly stochastic matrices; note that if inputs.permutation is 
+            # already a hard permutation matrix, the decomposition returns the
+            # same permutation matrix with probability 1
+            permus, distribs = birkhoff_von_neumann(inputs.permutation)
+            # since we set all invalid permutations to have probability zero,
+            # we need to normalize the distribution here, as the sum of probability
+            # of all valid permutations can be smaller than 1
+            distribs = distribs / tf.reduce_sum(distribs, axis=1, keepdims=True)
 
             # this applies when we are not using policy gradient and not using
             # Birkhoff-von Neumann decomposition (e.g. left-to-right decoding)
