@@ -21,7 +21,7 @@ class RunningMeanStd(object):
 
     def update(self, x):
         batch_mean = tf.reduce_mean(x, axis=0)
-        batch_var = tf.reduce_std(x, axis=0) ** 2
+        batch_var = tf.math.reduce_std(x, axis=0) ** 2
         # We don't want gradient to propagate back through self.mean and self.var
         batch_mean = tf.stop_gradient(batch_mean)
         batch_var = tf.stop_gradient(batch_var)
@@ -29,7 +29,7 @@ class RunningMeanStd(object):
         self.update_from_moments(batch_mean, batch_var, batch_count)
 
     def update_from_moments(self, batch_mean, batch_var, batch_count):
-        self.mean, self.var, self.count = uopdate_mean_var_count_from_moments(
+        self.mean, self.var, self.count = update_mean_var_count_from_moments(
             self.mean, self.var, self.count, batch_mean, batch_var, batch_count)
 
 # Helper function to update running mean std        
@@ -274,13 +274,14 @@ def train_faster_rcnn_dataset(train_folder,
     # von Neumann distribution; in these two cases, the permutation probability 
     # normalizing factor equals to 1    
     def loss_function_no_prob_normalization_init(it, b, verbose=False):
-           
-        # process the dataset batch dictionary into the standard
-        # model input format
-        inputs, permu_inputs = prepare_batch(b, vocab.size(), permutation_generator)
-        token_ind = b['token_indicators']
 
         def loss_function():
+
+            # process the dataset batch dictionary into the standard
+            # model input format
+            inputs, permu_inputs = prepare_batch(b, vocab.size(), permutation_generator)
+            token_ind = b['token_indicators']
+
             if permutation_generator is None:
                 # this assignment corresponds to left-to-right dncoding; note that
                 # the end token must ALWAYS be decoded last and also the start
@@ -309,7 +310,7 @@ def train_faster_rcnn_dataset(train_folder,
             # doubly stochastic matrices; note that if inputs.permutation is 
             # already a hard permutation matrix, the decomposition returns the
             # same permutation matrix with probability 1
-            permus, distribs = birkhoff_von_neumann(inputs.permutation)
+            permus, distribs = birkhoff_von_neumann(inputs.permutation, tf.constant(20))
             # since we set all invalid permutations to have probability zero,
             # we need to normalize the distribution here, as the sum of probability
             # of all valid permutations can be smaller than 1
@@ -368,13 +369,13 @@ def train_faster_rcnn_dataset(train_folder,
             # and permutation generator is optimized using permutation_loss
             if use_policy_gradient:
                 # raw reward
-                reward_unnorm = model.final_layer.label_log_prob
+                reward_unnorm = model.layers[-1].label_log_prob
                 reward_normalizer.update(reward_unnorm)
                 # normalized reward
                 reward_norm = (reward_unnorm - reward_normalizer.mean) \
                                 / (tf.sqrt(reward_normalizer.var) + 1e-4)
                 # Permutation loss with entropy
-                permutation_loss = -tf.reduce_mean(tf.log(distribs_selected) * reward_norm) 
+                permutation_loss = -tf.reduce_mean(tf.math.log(distribs_selected) * reward_norm)
                 entropy_reg = tf.reduce_mean(entropy_coeff * tfp_distribs.entropy())  
                 permutation_loss -= entropy_reg
             
@@ -461,10 +462,10 @@ def train_faster_rcnn_dataset(train_folder,
             
             if use_policy_gradient and not use_birkhoff_von_neumann:
                 loss_function, decode = \
-                loss_function_with_prob_normalization_init(iteration, batch, verbose=False)
+                loss_function_with_prob_normalization_init(iteration, batch, verbose=True)
             else:
                 loss_function, decode = \
-                loss_function_no_prob_normalization_init(iteration, batch, verbose=False)
+                loss_function_no_prob_normalization_init(iteration, batch, verbose=True)
                 
             for permu_itr in range(permutations_per_batch):
                 # keras requires the loss be a function
