@@ -235,7 +235,8 @@ def prepare_permutation(batch,
 
     # apply the birkhoff-von neumann decomposition to support general
     # doubly stochastic matrices
-    p, c = birkhoff_von_neumann(inputs.permutation)
+    p, c = birkhoff_von_neumann(inputs.permutation, tf.constant(20))
+    c = c / tf.reduce_sum(c, axis=1, keepdims=True)
 
     # convert the permutation to absolute positions
     inputs.absolute_positions = inputs.permutation[:, :-1, :-1]
@@ -306,7 +307,7 @@ def train_faster_rcnn_dataset(train_folder,
     train_dataset = faster_rcnn_dataset(train_folder, batch_size)
     validate_dataset = faster_rcnn_dataset(validate_folder, batch_size)
 
-    def loss_function(it, b, decode=False, verbose=False):
+    def loss_function(it, b, verbose=False):
 
         # process the dataset batch dictionary into the standard
         # model input format
@@ -320,31 +321,28 @@ def train_faster_rcnn_dataset(train_folder,
         loss = tf.reduce_mean(loss)
         if verbose:
             print('It: {} Train Loss: {}'.format(it, loss))
-
-        # occasionally do some extra processing during training
-        # such as printing the labels and model predictions
-        if decode:
-
-            # process the dataset batch dictionary into the standard
-            # model input format
-            inputs = prepare_batch_for_lm(b)
-
-            # calculate the ground truth sequence for this batch; and
-            # perform beam search using the current model
-            out = tf.strings.reduce_join(
-                vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
-            cap, log_p = beam_search(
-                inputs, model, beam_size=beam_size, max_iterations=20)
-            cap = tf.strings.reduce_join(
-                vocab.ids_to_words(cap), axis=2, separator=' ')
-
-            # show several model predicted sequences and their likelihoods
-            for i in range(cap.shape[0]):
-                print("Label: {}".format(out[i].numpy().decode('utf8')))
-                for c, p in zip(cap[i].numpy(), tf.math.exp(log_p)[i].numpy()):
-                    print("[p = {}] Model: {}".format(p, c.decode('utf8')))
-
         return loss
+
+    def decode(b):
+
+        # process the dataset batch dictionary into the standard
+        # model input format
+        inputs = prepare_batch_for_lm(b)
+
+        # calculate the ground truth sequence for this batch; and
+        # perform beam search using the current model
+        out = tf.strings.reduce_join(
+            vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
+        cap, log_p = beam_search(
+            inputs, model, beam_size=beam_size, max_iterations=20)
+        cap = tf.strings.reduce_join(
+            vocab.ids_to_words(cap), axis=2, separator=' ')
+
+        # show several model predicted sequences and their likelihoods
+        for i in range(cap.shape[0]):
+            print("Label: {}".format(out[i].numpy().decode('utf8')))
+            for c, p in zip(cap[i].numpy(), tf.math.exp(log_p)[i].numpy()):
+                print("[p = {}] Model: {}".format(p, c.decode('utf8')))
 
     def validate():
 
@@ -360,7 +358,7 @@ def train_faster_rcnn_dataset(train_folder,
     # run an initial forward pass using the model in order to build the
     # weights and define the shapes at every layer
     for batch in train_dataset.take(1):
-        loss_function(-1, batch, decode=False, verbose=False)
+        loss_function(-1, batch, verbose=False)
 
     # restore an existing model if one exists and create a directory
     # if the ckpt directory does not exist
@@ -387,8 +385,9 @@ def train_faster_rcnn_dataset(train_folder,
 
             # keras requires the loss be a function
             optim.minimize(lambda: loss_function(
-                iteration, batch, decode=iteration % 100 == 0, verbose=True),
-                           var_list)
+                iteration, batch, verbose=True), var_list)
+            if iteration % 100 == 0:
+                decode(batch)
 
             # increment the number of training steps so far; note this
             # does not save with the model and is reset when loading a

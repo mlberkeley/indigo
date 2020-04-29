@@ -141,8 +141,10 @@ def birkhoff_von_neumann_step(matrix):
         tf.equal(permutation, 0), upper_bound, matrix), axis=[1, 2])
 
 
-@tf.function
-def birkhoff_von_neumann(x, max_iterations=100):
+@tf.function(input_signature=[
+    tf.TensorSpec(shape=[None, None, None], dtype=tf.float32),
+    tf.TensorSpec(shape=None, dtype=tf.int32)])
+def birkhoff_von_neumann(x, max_iterations):
     """Returns the Berkhoff-Von-Neumann decomposition of a permutation matrix
     using the greedy birkhoff heuristic
 
