@@ -45,22 +45,26 @@ def find_largest_t(valid_matches, weights, edge_matrix):
     is_perfect_matching = len(matches) == n
     valid_matches = matches if is_perfect_matching else valid_matches
 
-    # at the last iteration of binary search return the best
-    # permutation matrix found so far
-    if loc == 0:
-        permutation = np.zeros((n, n), dtype=np.float32)
-        permutation[tuple(zip(*valid_matches.items()))] = 1
-        return permutation
-
     # otherwise if the result found is a perfect matching
     # then move onto larger thresholds
-    elif is_perfect_matching:
+    if weights.size > 2 and is_perfect_matching:
         return find_largest_t(valid_matches, weights[:loc], edge_matrix)
 
     # otherwise if the result found is not a perfect matching
     # then move onto smaller thresholds
-    else:
+    elif weights.size > 1 and not is_perfect_matching:
         return find_largest_t(valid_matches, weights[loc + 1:], edge_matrix)
+
+    # edge case when no valid permutation is a perfect matching and
+    # the decomposition terminates with coefficient zero
+    if not valid_matches:
+        return np.ones((n, n), dtype=np.float32)
+
+    # at the last iteration of binary search return the best
+    # permutation matrix found so far
+    permutation = np.zeros((n, n), dtype=np.float32)
+    permutation[tuple(zip(*valid_matches.items()))] = 1
+    return permutation
 
 
 def get_permutation_np(edge_matrix):
@@ -83,9 +87,11 @@ def get_permutation_np(edge_matrix):
     # to find the large edge weight threshold such that a perfect matching
     # exists in the graph with edges of weight greater than t
     # https://cstheory.stackexchange.com/questions/32321/
-    # weighted-matching-algorithm-for-minimizing-max-weight
+    #     weighted-matching-algorithm-for-minimizing-max-weight
+    n = edge_matrix.shape[1] // 2
     weights = np.sort(edge_matrix[np.nonzero(edge_matrix)])[::-1]
-    return find_largest_t({}, weights, edge_matrix)
+    return np.ones((n, n), dtype=np.float32) if weights.size == 0 \
+        else find_largest_t({}, weights, edge_matrix)
 
 
 def get_permutation(edge_matrix):
