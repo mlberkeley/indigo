@@ -313,8 +313,6 @@ def train_faster_rcnn_dataset(train_folder,
         # model input format
         inputs = prepare_permutation(b, vocab.size(), order)
         mask = b['token_indicators']
-
-        # calculate the loss function using the transformer model
         loss, _ = model.loss(inputs, training=True)
         loss = tf.reduce_sum(loss * mask[:, :-1], axis=1)
         loss = loss / tf.reduce_sum(mask[:, :-1], axis=1)
@@ -325,12 +323,9 @@ def train_faster_rcnn_dataset(train_folder,
 
     def decode(b):
 
-        # process the dataset batch dictionary into the standard
-        # model input format
-        inputs = prepare_batch_for_lm(b)
-
         # calculate the ground truth sequence for this batch; and
         # perform beam search using the current model
+        inputs = prepare_batch_for_lm(b)
         out = tf.strings.reduce_join(
             vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
         cap, log_p = beam_search(
