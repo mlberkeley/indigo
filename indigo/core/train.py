@@ -244,7 +244,7 @@ def prepare_permutation(batch,
     # convert the permutation to relative positions
     inputs.relative_positions = tf.reduce_sum(
         permutation_to_relative(p) * c[
-            ..., tf.newaxis, tf.newaxis, tf.newaxis], axis=1)[:, :-1, :-1, :]
+            ..., tf.newaxis, tf.newaxis, tf.newaxis], axis=1)[:, :-1, :-1]
 
     # convert the permutation to label distributions
     inputs.pointer_labels = tf.reduce_sum(

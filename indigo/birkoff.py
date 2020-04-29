@@ -46,7 +46,7 @@ def find_largest_t(valid_matches, weights, edge_matrix):
     valid_matches = matches if is_perfect_matching else valid_matches
 
     # at the last iteration of binary search return the best
-    # permutation matrix found so far or None if no permutation is found
+    # permutation matrix found so far
     if loc == 0:
         permutation = np.zeros((n, n), dtype=np.float32)
         permutation[tuple(zip(*valid_matches.items()))] = 1
@@ -82,6 +82,8 @@ def get_permutation_np(edge_matrix):
     # obtain a sorted list of edge weights to perform a binary search over
     # to find the large edge weight threshold such that a perfect matching
     # exists in the graph with edges of weight greater than t
+    # https://cstheory.stackexchange.com/questions/32321/
+    # weighted-matching-algorithm-for-minimizing-max-weight
     weights = np.sort(edge_matrix[np.nonzero(edge_matrix)])[::-1]
     return find_largest_t({}, weights, edge_matrix)
 
