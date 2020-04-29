@@ -467,15 +467,14 @@ def train_faster_rcnn_dataset(train_folder,
                 loss_function_no_prob_normalization_init(iteration, batch, verbose=False)
                 
             for permu_itr in range(permutations_per_batch):
-                decoder_loss, permutation_loss = loss_function()
                 # keras requires the loss be a function
                 if use_policy_gradient:
-                    optim.minimize(lambda: decoder_loss, var_list)
-                    permu_gen_optim.minimize(lambda: permutation_loss, permu_gen_var_list)
+                    optim.minimize(lambda: loss_function()[0], var_list)
+                    permu_gen_optim.minimize(lambda: loss_function()[1], permu_gen_var_list)
                 elif permutation_generator is not None:
-                    optim.minimize(lambda: decoder_loss, var_list + permu_gen_var_list)
+                    optim.minimize(lambda: loss_function()[0], var_list + permu_gen_var_list)
                 else:
-                    optim.minimize(lambda: decoder_loss, var_list)                    
+                    optim.minimize(lambda: loss_function()[0], var_list)
             
             if iteration % (100 // permutations_per_batch) == 0:
                 decode()
