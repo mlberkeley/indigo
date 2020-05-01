@@ -155,7 +155,7 @@ def inspect_order_faster_rcnn_dataset(tfrecord_folder,
         # process the dataset batch dictionary into the standard
         # model input format; perform beam search
         inputs = prepare_batch_for_lm(batch)
-        cap, log_p, perm = beam_search(
+        cap, log_p = beam_search(
             inputs, model, beam_size=beam_size, max_iterations=20)
         cap = tf.strings.reduce_join(
             vocab.ids_to_words(cap), axis=2, separator=' ').numpy()
@@ -165,8 +165,8 @@ def inspect_order_faster_rcnn_dataset(tfrecord_folder,
         pos = tf.argmax(pos, axis=-1, output_type=tf.int32) - 1
         pos = tf.reduce_sum(tf.nn.relu(pos[:, 1:, 1:]), axis=1)
         pos = tf.one_hot(pos, tf.shape(pos)[1], dtype=tf.int32)
-        pos = tf.reshape(pos, tf.concat([[
-            batch_size, beam_size], tf.shape(pos)[1:]], 0))
+        pos = tf.reshape(pos, tf.concat([[tf.shape(
+            pos)[0] // beam_size, beam_size], tf.shape(pos)[1:]], 0))
 
         # calculate the order output by the permutation transformer
         if isinstance(order, tf.keras.Model):
@@ -184,4 +184,4 @@ def inspect_order_faster_rcnn_dataset(tfrecord_folder,
                                            hyp_caps[paths[i]]))
             print("Decoder Permutation:\n", pos[i, 0].numpy())
             if isinstance(order, tf.keras.Model):
-                print("Encoder Permutation:\n", perm[i, 0].numpy())
+                print("Encoder Permutation:\n", perm[i].numpy())

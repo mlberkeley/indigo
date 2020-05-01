@@ -61,9 +61,9 @@ if __name__ == "__main__":
                                        args.embedding_size,
                                        args.heads,
                                        args.num_layers,
-                                       queries_dropout=args.queries_dropout,
-                                       keys_dropout=args.keys_dropout,
-                                       values_dropout=args.values_dropout,
+                                       queries_dropout=0.,
+                                       keys_dropout=0.,
+                                       values_dropout=0.,
                                        first_layer=args.first_layer,
                                        iterations=args.iterations)
 
