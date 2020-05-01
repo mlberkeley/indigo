@@ -71,9 +71,8 @@ def beam_search(inputs,
 
     # helper function for un flattening the beam size from the batch axis
     def expand(x):
-        shape = tf.shape(x)[1:]
         return tf.reshape(x, tf.concat([[
-            batch_size, last_beam_size], shape], axis=0))
+            batch_size, last_beam_size], tf.shape(x)[1:]], axis=0))
 
     # decoding is finished so un flatten the beam dimension
     # returns a shape like [batch_size, beam_size, sequence_length]
