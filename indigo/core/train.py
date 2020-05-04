@@ -113,19 +113,30 @@ def prepare_batch_for_lm(batch):
     boxes = batch["boxes"]
     detections = batch["labels"]
     words = batch["words"]
-    token_ind = batch["token_indicators"]
+    mask = batch["token_indicators"]
 
     # build a region feature input for the first layer of the model
     region = RegionFeatureInput(features=boxes_features,
                                 boxes=boxes,
                                 detections=detections)
 
+    ind = tf.tile(tf.range(tf.shape(
+        mask)[1] - 1)[tf.newaxis], [tf.shape(mask)[0], 1])
+    ind = tf.reverse_sequence(ind, tf.cast(tf.reduce_sum(
+        mask, axis=1), tf.int32) - 2, seq_axis=1, batch_axis=0)
+    ind = tf.concat([tf.fill([
+        tf.shape(mask)[0], 1], 0), 1 + ind], axis=1)
+    permutation = tf.cast(
+        tf.one_hot(ind, tf.shape(mask)[1]), tf.int32)
+
+    words = tf.matmul(permutation, words[..., tf.newaxis])[..., 0]
+
     # build the inputs to the transformer model by left
     # shifting the target sequence
     inputs = TransformerInput(
         queries=words[:, :-1],
         values=region,
-        queries_mask=tf.greater(token_ind[:, :-1], 0),
+        queries_mask=tf.greater(mask[:, :-1], 0),
         values_mask=tf.greater(image_ind, 0))
 
     # this assignment is necessary for the pointer after logits layer
@@ -160,6 +171,7 @@ def prepare_batch_for_pt(batch):
     boxes = batch["boxes"]
     detections = batch["labels"]
     words = batch["words"]
+    mask = batch["token_indicators"]
 
     # build a region feature input for the first layer of the model
     region = RegionFeatureInput(features=boxes_features,
@@ -168,6 +180,17 @@ def prepare_batch_for_pt(batch):
 
     start_end_or_pad = tf.logical_or(tf.equal(
         words, 0), tf.logical_or(tf.equal(words, 2), tf.equal(words, 3)))
+
+    ind = tf.tile(tf.range(tf.shape(
+        mask)[1] - 1)[tf.newaxis], [tf.shape(mask)[0], 1])
+    ind = tf.reverse_sequence(ind, tf.cast(tf.reduce_sum(
+        mask, axis=1), tf.int32) - 2, seq_axis=1, batch_axis=0)
+    ind = tf.concat([tf.fill([
+        tf.shape(mask)[0], 1], 0), 1 + ind], axis=1)
+    permutation = tf.cast(
+        tf.one_hot(ind, tf.shape(mask)[1]), tf.int32)
+
+    words = tf.matmul(permutation, words[..., tf.newaxis])[..., 0]
 
     # build the inputs to the transformer model by left
     # shifting the target sequence
@@ -253,6 +276,10 @@ def prepare_permutation(batch,
     inputs.logits_labels = tf.matmul(
         inputs.permutation[:, 1:, 1:], tf.one_hot(
             inputs.ids, tf.cast(vocab_size, tf.int32)))
+
+    # these gradients are troublesome so they are stopped for now
+    inputs.relative_positions = tf.stop_gradient(inputs.relative_positions)
+    inputs.pointer_labels = tf.stop_gradient(inputs.pointer_labels)
 
     return inputs
 

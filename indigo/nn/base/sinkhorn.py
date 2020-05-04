@@ -63,8 +63,11 @@ def sinkhorn_cond_fn(x,
     return tf.less(step, iterations)
 
 
+@tf.function(input_signature=[
+    tf.TensorSpec(shape=[None, None, None], dtype=tf.float32),
+    tf.TensorSpec(shape=None, dtype=tf.int32)])
 def sinkhorn(x,
-             iterations=20):
+             iterations):
     """Calculate the result of applying the Sinkhorn Operator
     to a permutation matrix in log space
 
@@ -121,7 +124,7 @@ class Sinkhorn(tf.keras.layers.Layer):
             as the transformer attention weights"""
 
         # apply the sinkhorn operator
-        return tf.exp(sinkhorn(inputs, self.iterations))
+        return tf.exp(sinkhorn(inputs, tf.constant(self.iterations)))
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
