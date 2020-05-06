@@ -6,7 +6,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--out_tfrecord_folder', type=str, default='tfrecord')
+        '--out_tfrecord_folder', type=str, default='tfrecords')
     parser.add_argument(
         '--caption_folder', type=str, default='captions_features')
     parser.add_argument(
