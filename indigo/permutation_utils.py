@@ -82,7 +82,7 @@ def permutation_to_relative(permutation):
 
     # make sure the permutation is an int or the below computation
     # does not make sense
-    permutation = tf.cast(permutation[:, :-1, :-1], tf.int32)
+    permutation = tf.cast(permutation, tf.int32)
 
     # this first section will convert the one-hot style indexing to
     # a ternary indexing where -1 means insert to the right of
@@ -98,7 +98,7 @@ def permutation_to_relative(permutation):
 
     # get the one hot distribution of relative positions; contains
     # a one at location i when [left, center, right]_i
-    return tf.one_hot(sorted_relative + 1, 3)
+    return tf.one_hot(sorted_relative[..., :-1, :-1] + 1, 3)
 
 
 @tf.function(input_signature=[
