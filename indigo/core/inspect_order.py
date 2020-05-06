@@ -7,6 +7,9 @@ import os
 import numpy as np
 
 
+np.set_printoptions(threshold=np.inf)
+
+
 def prepare_batch_for_lm(batch):
     """Transform a batch dictionary into a dataclass standard format
     for the transformer to process
@@ -156,7 +159,7 @@ def inspect_order_faster_rcnn_dataset(tfrecord_folder,
         # model input format; perform beam search
         inputs = prepare_batch_for_lm(batch)
         cap, log_p = beam_search(
-            inputs, model, beam_size=beam_size, max_iterations=20)
+            inputs, model, beam_size=beam_size, max_iterations=30)
         cap = tf.strings.reduce_join(
             vocab.ids_to_words(cap), axis=2, separator=' ').numpy()
 
@@ -176,12 +179,11 @@ def inspect_order_faster_rcnn_dataset(tfrecord_folder,
         # requires input to be strings; not there will be slight
         # formatting differences between ref and hyp
         for i in range(cap.shape[0]):
-            hyp_caps[paths[i]] = cap[i, 0].decode("utf-8").replace(
-                "<pad>", "").replace("<start>", "").replace(
-                "<end>", "").replace("  ", " ").strip()
-            print("{}: [p = {}] {}".format(paths[i],
-                                           np.exp(log_p[i, 0].numpy()),
-                                           hyp_caps[paths[i]]))
-            print("Decoder Permutation:\n", pos[i, 0].numpy())
-            if isinstance(order, tf.keras.Model):
-                print("Encoder Permutation:\n", perm[i].numpy())
+            if paths[i] not in hyp_caps:
+                hyp_caps[paths[i]] = cap[i, 0].decode("utf-8")
+                print("{}: [p = {}] {}".format(paths[i],
+                                               np.exp(log_p[i, 0].numpy()),
+                                               hyp_caps[paths[i]]))
+                print("Decoder Permutation:\n", pos[i, 0].numpy())
+                if isinstance(order, tf.keras.Model):
+                    print("Encoder Permutation:\n", perm[i].numpy())

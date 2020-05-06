@@ -120,17 +120,6 @@ def prepare_batch_for_lm(batch):
                                 boxes=boxes,
                                 detections=detections)
 
-    ind = tf.tile(tf.range(tf.shape(
-        mask)[1] - 1)[tf.newaxis], [tf.shape(mask)[0], 1])
-    ind = tf.reverse_sequence(ind, tf.cast(tf.reduce_sum(
-        mask, axis=1), tf.int32) - 2, seq_axis=1, batch_axis=0)
-    ind = tf.concat([tf.fill([
-        tf.shape(mask)[0], 1], 0), 1 + ind], axis=1)
-    permutation = tf.cast(
-        tf.one_hot(ind, tf.shape(mask)[1]), tf.int32)
-
-    words = tf.matmul(permutation, words[..., tf.newaxis])[..., 0]
-
     # build the inputs to the transformer model by left
     # shifting the target sequence
     inputs = TransformerInput(
@@ -171,7 +160,6 @@ def prepare_batch_for_pt(batch):
     boxes = batch["boxes"]
     detections = batch["labels"]
     words = batch["words"]
-    mask = batch["token_indicators"]
 
     # build a region feature input for the first layer of the model
     region = RegionFeatureInput(features=boxes_features,
@@ -180,17 +168,6 @@ def prepare_batch_for_pt(batch):
 
     start_end_or_pad = tf.logical_or(tf.equal(
         words, 0), tf.logical_or(tf.equal(words, 2), tf.equal(words, 3)))
-
-    ind = tf.tile(tf.range(tf.shape(
-        mask)[1] - 1)[tf.newaxis], [tf.shape(mask)[0], 1])
-    ind = tf.reverse_sequence(ind, tf.cast(tf.reduce_sum(
-        mask, axis=1), tf.int32) - 2, seq_axis=1, batch_axis=0)
-    ind = tf.concat([tf.fill([
-        tf.shape(mask)[0], 1], 0), 1 + ind], axis=1)
-    permutation = tf.cast(
-        tf.one_hot(ind, tf.shape(mask)[1]), tf.int32)
-
-    words = tf.matmul(permutation, words[..., tf.newaxis])[..., 0]
 
     # build the inputs to the transformer model by left
     # shifting the target sequence
@@ -341,8 +318,8 @@ def train_faster_rcnn_dataset(train_folder,
         inputs = prepare_permutation(b, vocab.size(), order)
         mask = b['token_indicators']
         loss, _ = model.loss(inputs, training=True)
-        loss = tf.reduce_sum(loss * mask[:, :-1], axis=1)
-        loss = loss / tf.reduce_sum(mask[:, :-1], axis=1)
+        loss = tf.reduce_sum(loss * mask[:, 1:], axis=1)
+        loss = loss / tf.reduce_sum(mask[:, 1:], axis=1)
         loss = tf.reduce_mean(loss)
         if verbose:
             print('It: {} Train Loss: {}'.format(it, loss))

@@ -137,16 +137,20 @@ class Pointer(Layer):
         logits = tf.math.log_softmax(self.call(inputs, **kwargs)[:, -1])
         log_probs, ids = tf.math.top_k(logits, k=1)
 
+        # calculate the position of the rightmost token
+        R = inputs.relative_positions
+        R = tf.argmax(R, axis=-1, output_type=tf.int32) - 1
+        rightmost_ids = tf.argmax(tf.reduce_sum(
+            tf.nn.relu(R), axis=-2), axis=-1, output_type=tf.int32)
+
         # mask the log probabilities and tokens of already completed
         # beams so that they are unchanged when decoding
         mask = closed[:, tf.newaxis]
         log_probs = tf.where(mask, tf.zeros_like(log_probs), log_probs)
-        ids = tf.where(mask, tf.fill(tf.shape(ids), tf.shape(logits)[1]), ids)
+        ids = tf.where(mask, rightmost_ids[:, tf.newaxis], ids)
 
         # compute the relative position update vector using the samples ids
         # this equals -1 if ids are to the left and +1 if to the right
-        R = inputs.relative_positions
-        R = tf.argmax(R, axis=-1, output_type=tf.int32) - 1
         r = tf.gather(R, ids, batch_dims=1, axis=2)
         r = tf.squeeze(tf.where(tf.equal(r, 0), tf.ones_like(r), r), axis=2)
 
@@ -216,11 +220,17 @@ class Pointer(Layer):
         closed_log_probs = tf.where(tf.equal(first, 0), tf.fill(
             tf.shape(first), -999999.), tf.fill(tf.shape(first), 0.))
 
+        # calculate the position of the rightmost token
+        R = inputs.relative_positions
+        R = tf.argmax(R, axis=-1, output_type=tf.int32) - 1
+        rightmost_ids = tf.argmax(tf.reduce_sum(
+            tf.nn.relu(R), axis=-2), axis=-1, output_type=tf.int32)
+
         # when a beam is closed special behavior is required
         # do not change the log probability and append only pad tokens
         mask = closed[:, tf.newaxis]
         log_probs = tf.where(mask, closed_log_probs, log_probs)
-        ids = tf.where(mask, tf.fill(tf.shape(ids), tf.shape(logits)[1]), ids)
+        ids = tf.where(mask, rightmost_ids[:, tf.newaxis], ids)
 
         # manipulate the log probabilities to extract all possible
         # next beam candidates and their probability
@@ -280,7 +290,7 @@ class Pointer(Layer):
 
         # compute the relative position update vector using the samples ids
         # this equals -1 if ids are to the left and +1 if to the right
-        R = select(inputs.relative_positions)
+        R = inputs.relative_positions
         R = tf.argmax(R, axis=-1, output_type=tf.int32) - 1
         r = tf.gather(R, ids, batch_dims=1, axis=2)
         r = tf.squeeze(tf.where(tf.equal(r, 0), tf.ones_like(r), r), axis=2)
@@ -295,7 +305,7 @@ class Pointer(Layer):
         # update log probability and note that the pointer network
         # does not specify a termination condition by itself
         inputs.log_probs = tf.reshape(log_probs, [batch_size * cand_size])
-        return inputs, closed, cand_size
+        return inputs, select(closed), cand_size
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
