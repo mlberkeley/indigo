@@ -208,12 +208,13 @@ def prepare_permutation(batch,
     # model input format
     inputs = prepare_batch_for_lm(batch)
     mask = batch['token_indicators']
+    words = batch['words']
 
     # the dataset is not compiled with an ordering so one must
     # be generated on the fly during training; only applies
     # when using a pointer layer; note that the end token
     # must always be last and start token must always  be first
-    if order == 'r2l':  # corresponds to right-to-left decoding
+    if order == 'r2l':  # corresponds to right-to-left
         ind = tf.tile(tf.range(tf.shape(
             mask)[1] - 1)[tf.newaxis], [tf.shape(mask)[0], 1])
         ind = tf.reverse_sequence(ind, tf.cast(tf.reduce_sum(
@@ -221,11 +222,27 @@ def prepare_permutation(batch,
         ind = tf.concat([tf.fill([
             tf.shape(mask)[0], 1], 0), 1 + ind], axis=1)
 
-    if order == 'l2r':  # corresponds to left-to-right decoding
+    if order == 'l2r':  # corresponds to left-to-right
         ind = tf.tile(tf.range(tf.shape(
             mask)[1])[tf.newaxis], [tf.shape(mask)[0], 1])
 
-    if order == 'r2l' or order == 'l2r':
+    if order == 'rare':  # corresponds to rare-first
+        upper_bound = tf.reduce_max(words, axis=1, keepdims=True) + 1
+        scores = tf.where(tf.equal(words, 0), -tf.ones_like(words), words)
+        scores = tf.where(tf.equal(words, 1), upper_bound, scores)
+        scores = tf.where(tf.equal(words, 2), upper_bound + 1, scores)
+        scores = tf.where(tf.equal(words, 3), tf.zeros_like(words), scores)
+        ind = tf.argsort(scores, direction='DESCENDING')
+
+    if order == 'common':  # corresponds to common-first
+        upper_bound = tf.reduce_max(words, axis=1, keepdims=True) + 1
+        scores = tf.where(tf.equal(words, 0), upper_bound + 2, words)
+        scores = tf.where(tf.equal(words, 1), upper_bound, scores)
+        scores = tf.where(tf.equal(words, 2), tf.zeros_like(words), scores)
+        scores = tf.where(tf.equal(words, 3), upper_bound + 1, scores)
+        ind = tf.argsort(scores, direction='ASCENDING')
+
+    if order in ['r2l', 'l2r', 'rare', 'common']:
         inputs.permutation = tf.one_hot(ind, tf.shape(mask)[1])
 
     # pass the training example through the permutation transformer
