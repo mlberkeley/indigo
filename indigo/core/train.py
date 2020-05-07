@@ -148,6 +148,7 @@ def prepare_permutation(batch,
     # doubly stochastic matrices
     p, c = birkhoff_von_neumann(inputs.permutation, tf.constant(20))
     c = c / tf.reduce_sum(c, axis=1, keepdims=True)
+    c = tf.stop_gradient(c)
 
     # convert the permutation to absolute and relative  positions
     inputs.absolute_positions = inputs.permutation[:, :-1, :-1]
