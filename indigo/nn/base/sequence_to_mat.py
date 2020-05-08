@@ -75,6 +75,7 @@ class SequenceToMat(tf.keras.layers.Layer):
             num_columns=shape[-1], batch_shape=shape[:-2], dtype=tf.bool))
 
         # apply a boolean mask to the keys and values
+        scores = tf.clip_by_value(scores, -999999., 10.)
         return tf.where(
             mask, scores, tf.fill(tf.shape(scores), -999999.))
 
