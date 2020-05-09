@@ -70,14 +70,15 @@ class SequenceToMat(tf.keras.layers.Layer):
         # a valid permutation matrix has rows and columns that sum to one,
         # even for rows that correspond to pad tokens
         shape = tf.shape(mask)
-        mask = tf.logical_or(mask, tf.eye(
-            shape[-2],
-            num_columns=shape[-1], batch_shape=shape[:-2], dtype=tf.bool))
+        eye = tf.eye(shape[-2], num_columns=shape[
+            -1], batch_shape=shape[:-2], dtype=tf.bool)
+        diagonal_mask = tf.logical_and(tf.logical_not(mask), eye)
 
         # apply a boolean mask to the keys and values
         scores = tf.clip_by_value(scores, -999999., 10.)
+        scores = tf.where(mask, scores, tf.fill(tf.shape(scores), -999.))
         return tf.where(
-            mask, scores, tf.fill(tf.shape(scores), -999999.))
+            diagonal_mask, tf.fill(tf.shape(scores), 999.), scores)
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

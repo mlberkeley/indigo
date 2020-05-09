@@ -99,12 +99,26 @@ class PermutationLayer(Layer):
         activations = self.sequence_to_mat(attention_input, **kwargs)
         activations = tf.reduce_sum(activations, axis=1)
 
+        # apply a mask to the scores matrix so that only real
+        # non terminal elements are permuted out of place
+        mask = tf.expand_dims(inputs.queries_mask, -2)
+        mask = tf.logical_and(mask, tf.expand_dims(inputs.queries_mask, -1))
+
+        # pad tokens should not be permuted and logits on the diagonal
+        # for pad tokens should not be masked out; this is necessary because
+        # a valid permutation matrix has rows and columns that sum to one,
+        # even for rows that correspond to pad tokens
+        shape = tf.shape(mask)
+        eye = tf.eye(shape[-2], num_columns=shape[
+            -1], batch_shape=shape[:-2], dtype=tf.bool)
+        mask = tf.cast(tf.logical_or(mask, eye), tf.float32)
+
         # pass the outputs of the attention through a normalization layer
         # that performs sinkhorn normalization
         g = tfp.distributions.Gumbel(
             loc=tf.zeros_like(activations), scale=tf.ones_like(activations))
-        return self.stick_breaking((
-            activations + g.sample()) / self.temperature, **kwargs)
+        return self.stick_breaking([(
+            activations + g.sample()) / self.temperature, mask], **kwargs)
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

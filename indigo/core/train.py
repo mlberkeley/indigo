@@ -143,16 +143,11 @@ def prepare_permutation(batch,
     # to obtain a doubly stochastic matrix
     if isinstance(order, tf.keras.Model):  # corresponds to soft orderings
         inputs.permutation = order(prepare_batch_for_pt(batch))
-        p = inputs.permutation[0]
-        print(inputs.permutation[0])
-        print(tf.reduce_sum(p, axis=0))
-        print(tf.reduce_sum(p, axis=1))
-        exit()
 
     # apply the birkhoff-von neumann decomposition to support general
     # doubly stochastic matrices
     p, c = birkhoff_von_neumann(inputs.permutation, tf.constant(20))
-    c = (c + 1e-4) / tf.reduce_sum(c + 1e-4, axis=1, keepdims=True)
+    c = (c + 1e-7) / tf.reduce_sum(c + 1e-7, axis=1, keepdims=True)
     c = tf.stop_gradient(c)
 
     # convert the permutation to absolute and relative  positions

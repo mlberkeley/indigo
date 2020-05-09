@@ -1,8 +1,8 @@
 import tensorflow as tf
-import numpy as np
 
 
 def stick_breaking_loop_fn(x,
+                           x_mask,
                            b,
                            step):
     """Calculate the result of applying the Stick Breaking Operator
@@ -13,21 +13,24 @@ def stick_breaking_loop_fn(x,
     x: tf.Tensor
         a permutation matrix that will be generated using the stick
         breaking procedure
+    x_mask: tf.Tensor
+        a mask that specifies which elements of the permutation
+        matrix are allowed to be non-zero
     b: tf.Tensor
         a permutation matrix in logistic space that will be
         processed with the Stick Breaking operator
     step: tf.Tensor
         the current number of iterations of the Stick Breaking operator
-        that have been applied
-    iterations: tf.Tensor
-        the total number of iterations of the Stick Breaking operator
-        to apply to the data matrix
+        that have been applied=
 
     Returns:
 
     x: tf.Tensor
         a permutation matrix that will be generated using the stick
         breaking procedure
+    x_mask: tf.Tensor
+        a mask that specifies which elements of the permutation
+        matrix are allowed to be non-zero
     b: tf.Tensor
         a permutation matrix in logistic space that will be
         processed with the Stick Breaking operator
@@ -39,13 +42,14 @@ def stick_breaking_loop_fn(x,
     n = tf.math.floormod(step, tf.shape(b)[2])
     N = tf.shape(b)[2]
 
-    lower_bound = tf.maximum(
-        0.,
-        2. - tf.cast(N, tf.float32) + tf.cast(n, tf.float32) -
-        tf.reduce_sum(x[:, m, :n], axis=1) +
-        tf.reduce_sum(x[:, :m, (n + 1):], axis=[1, 2]))
+    max_future_vals = tf.maximum(0., x_mask[
+        :, m, (n + 1):] - tf.reduce_sum(x[:, :m, (n + 1):], axis=1))
+    max_future_mass = tf.reduce_sum(max_future_vals, axis=1)
 
-    upper_bound = tf.minimum(
+    lower_bound = x_mask[:, m, n] * tf.maximum(
+        0.,
+        1. - tf.reduce_sum(x[:, m, :n], axis=1) - max_future_mass)
+    upper_bound = x_mask[:, m, n] * tf.minimum(
         1. - tf.reduce_sum(x[:, m, :n], axis=1),
         1. - tf.reduce_sum(x[:, :m, n], axis=1))
 
@@ -56,10 +60,11 @@ def stick_breaking_loop_fn(x,
     mask = tf.logical_and(
         tf.equal(i, [[m]]), tf.equal(j, [[n]]))[tf.newaxis]
 
-    return tf.where(mask, p, x), b, step + 1
+    return tf.where(mask, p, x), x_mask, b, step + 1
 
 
 def stick_breaking_cond_fn(x,
+                           x_mask,
                            b,
                            step):
     """Calculate the result of applying the Stick Breaking Operator
@@ -70,37 +75,39 @@ def stick_breaking_cond_fn(x,
     x: tf.Tensor
         a permutation matrix that will be generated using the stick
         breaking procedure
+    x_mask: tf.Tensor
+        a mask that specifies which elements of the permutation
+        matrix are allowed to be non-zero
     b: tf.Tensor
         a permutation matrix in logistic space that will be
         processed with the Stick Breaking operator
     step: tf.Tensor
         the current number of iterations of the Stick Breaking operator
         that have been applied
-    iterations: tf.Tensor
-        the total number of iterations of the Stick Breaking operator
-        to apply to the data matrix
 
     Returns:
 
     x: tf.Tensor
         a permutation matrix that will be generated using the stick
         breaking procedure
+    x_mask: tf.Tensor
+        a mask that specifies which elements of the permutation
+        matrix are allowed to be non-zero
     b: tf.Tensor
         a permutation matrix in logistic space that will be
         processed with the Stick Breaking operator
     step: tf.Tensor
         the current number of iterations of the Stick Breaking operator
-        that have been applied
-    iterations: tf.Tensor
-        the total number of iterations of the Stick Breaking operator
-        to apply to the data matrix"""
+        that have been applied"""
 
     return tf.less(step, tf.square(tf.shape(b)[2]))
 
 
 @tf.function(input_signature=[
+    tf.TensorSpec(shape=[None, None, None], dtype=tf.float32),
     tf.TensorSpec(shape=[None, None, None], dtype=tf.float32)])
-def stick_breaking(x):
+def stick_breaking(x,
+                   x_mask):
     """Calculate the result of applying the Stick Breaking Operator
     to a permutation matrix in logistic space
 
@@ -109,6 +116,9 @@ def stick_breaking(x):
     x: tf.Tensor
         a permutation matrix in log space that will be
         processed with the Stick Breaking operator
+    x_mask: tf.Tensor
+        a mask that specifies which elements of the permutation
+        matrix are allowed to be non-zero
 
     Returns:
 
@@ -116,7 +126,7 @@ def stick_breaking(x):
         a permutation matrix in log space that has been
         processed with the Stick Breaking operator"""
 
-    args = [tf.zeros_like(x), x, tf.constant(0, dtype=tf.int32)]
+    args = [tf.zeros_like(x), x_mask, x, tf.constant(0, dtype=tf.int32)]
     return tf.while_loop(
         stick_breaking_cond_fn, stick_breaking_loop_fn, args)[0]
 
@@ -145,7 +155,7 @@ class StickBreaking(tf.keras.layers.Layer):
             as the transformer attention weights"""
 
         # apply the stick breaking operator
-        return stick_breaking(tf.math.sigmoid(inputs))
+        return stick_breaking(tf.math.sigmoid(inputs[0]), inputs[1])
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
