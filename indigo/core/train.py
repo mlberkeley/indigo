@@ -143,6 +143,11 @@ def prepare_permutation(batch,
     # to obtain a doubly stochastic matrix
     if isinstance(order, tf.keras.Model):  # corresponds to soft orderings
         inputs.permutation = order(prepare_batch_for_pt(batch))
+        p = inputs.permutation[0]
+        print(inputs.permutation[0])
+        print(tf.reduce_sum(p, axis=0))
+        print(tf.reduce_sum(p, axis=1))
+        exit()
 
     # apply the birkhoff-von neumann decomposition to support general
     # doubly stochastic matrices

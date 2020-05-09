@@ -1,7 +1,7 @@
 from indigo.nn.wrappers.layer import Layer
 from indigo.nn.base.block import Block
 from indigo.nn.base.sequence_to_mat import SequenceToMat
-from indigo.nn.base.sinkhorn import Sinkhorn
+from indigo.nn.base.stick_breaking import StickBreaking
 from indigo.nn.input import AttentionInput
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -14,7 +14,6 @@ class PermutationLayer(Layer):
                  heads,
                  queries_dropout=0.,
                  keys_dropout=0.,
-                 iterations=20,
                  temperature=1.,
                  **kwargs):
         """Creates a Transformer permutation layer by applying a multi
@@ -35,16 +34,13 @@ class PermutationLayer(Layer):
         keys_dropout: float
             the ratio of units to drop during training to the
             number of units in each attention layer
-        iterations: tf.Tensor
-            the total number of iterations of the Sinkhorn operator
-            to apply to the data matrix
         temperature: float
             a positive number to divide the permutation logits by prior
             to applying sinkhorn normaliozation"""
         super(PermutationLayer, self).__init__()
 
         # the core attention and processing variables
-        self.sinkhorn = Sinkhorn(iterations=iterations)
+        self.stick_breaking = StickBreaking()
         self.sequence_to_mat = SequenceToMat(
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout)
@@ -58,7 +54,6 @@ class PermutationLayer(Layer):
         self.heads = heads
         self.queries_dropout = queries_dropout
         self.keys_dropout = keys_dropout
-        self.iterations = iterations
         self.temperature = temperature
         self.kwargs = kwargs
 
@@ -108,7 +103,7 @@ class PermutationLayer(Layer):
         # that performs sinkhorn normalization
         g = tfp.distributions.Gumbel(
             loc=tf.zeros_like(activations), scale=tf.ones_like(activations))
-        return self.sinkhorn((
+        return self.stick_breaking((
             activations + g.sample()) / self.temperature, **kwargs)
 
     def get_config(self):
@@ -126,7 +121,6 @@ class PermutationLayer(Layer):
                       heads=self.heads,
                       queries_dropout=self.queries_dropout,
                       keys_dropout=self.keys_dropout,
-                      iterations=self.iterations,
                       temperature=self.temperature,
                       ** self.kwargs)
 

@@ -36,8 +36,6 @@ if __name__ == "__main__":
     parser.add_argument(
         '--order', type=str,
         default='soft', choices=['l2r', 'r2l', 'rare', 'common', 'soft'])
-    parser.add_argument(
-        '--iterations', type=int, default=1000)
     args = parser.parse_args()
 
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:
@@ -64,8 +62,7 @@ if __name__ == "__main__":
                                        queries_dropout=0.,
                                        keys_dropout=0.,
                                        values_dropout=0.,
-                                       first_layer=args.first_layer,
-                                       iterations=args.iterations)
+                                       first_layer=args.first_layer)
 
     inspect_order_faster_rcnn_dataset(
         args.validate_folder,

@@ -18,7 +18,6 @@ class PermutationTransformer(Sequential):
                  keys_dropout=0.,
                  values_dropout=0.,
                  first_layer='region',
-                 iterations=20,
                  temperature=1.,
                  **kwargs):
         """Creates a Transformer Keras model for processing sequences
@@ -50,9 +49,6 @@ class PermutationTransformer(Sequential):
         first_layer: class
             specifies the class to use for the first layer in the transformer
             defaults to WordFeature if not specified
-        iterations: tf.Tensor
-            the total number of iterations of the Sinkhorn operator
-            to apply to the data matrix
         temperature: float
             a positive number to divide the permutation logits by prior
             to applying sinkhorn normalization"""
@@ -96,7 +92,6 @@ class PermutationTransformer(Sequential):
             hidden_size // 2, heads,
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout,
-            iterations=iterations,
             temperature=temperature, **kwargs)])
 
         super(PermutationTransformer, self).__init__(layers)
@@ -111,7 +106,6 @@ class PermutationTransformer(Sequential):
         self.keys_dropout = keys_dropout
         self.values_dropout = values_dropout
         self.first_layer = first_layer
-        self.iterations = iterations
         self.temperature = temperature
         self.kwargs = kwargs
 
@@ -134,7 +128,6 @@ class PermutationTransformer(Sequential):
                       keys_dropout=self.keys_dropout,
                       values_dropout=self.values_dropout,
                       first_layer=self.first_layer,
-                      iterations=self.iterations,
                       temperature=self.temperature,
                       ** self.kwargs)
 
