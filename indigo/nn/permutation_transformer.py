@@ -18,7 +18,7 @@ class PermutationTransformer(Sequential):
                  keys_dropout=0.,
                  values_dropout=0.,
                  first_layer='region',
-                 temperature=10.,
+                 temperature=1.,
                  **kwargs):
         """Creates a Transformer Keras model for processing sequences
         and uses the tf.layers.Sequential as backend

@@ -14,6 +14,13 @@ import os
 np.set_printoptions(threshold=np.inf)
 
 
+@tf.custom_gradient
+def scale_gradients(x, gamma):
+    def grad(dy):
+        return dy * gamma, 0.0
+    return x, grad
+
+
 def prepare_batch_for_lm(batch):
     """Transform a batch dictionary into a dataclass standard format
     for the transformer to process
@@ -142,13 +149,13 @@ def prepare_permutation(batch,
     # pass the training example through the permutation transformer
     # to obtain a doubly stochastic matrix
     if isinstance(order, tf.keras.Model):  # corresponds to soft orderings
-        inputs.permutation = order(prepare_batch_for_pt(batch))
+        inputs.permutation = scale_gradients(
+            order(prepare_batch_for_pt(batch), training=True), 0.1)
 
     # apply the birkhoff-von neumann decomposition to support general
     # doubly stochastic matrices
     p, c = birkhoff_von_neumann(inputs.permutation, tf.constant(20))
-    c = (c + 1e-7) / tf.reduce_sum(c + 1e-7, axis=1, keepdims=True)
-    c = tf.stop_gradient(c)
+    c = tf.stop_gradient(c / tf.reduce_sum(c, axis=1, keepdims=True))
 
     # convert the permutation to absolute and relative  positions
     inputs.absolute_positions = inputs.permutation[:, :-1, :-1]

@@ -13,7 +13,7 @@ class PermutationLayer(Layer):
                  hidden_size,
                  queries_dropout=0.,
                  keys_dropout=0.,
-                 temperature=10.,
+                 temperature=1.,
                  **kwargs):
         """Creates a Transformer permutation layer by applying a multi
         head sequence to matrix layer; and then applying sinkhorn

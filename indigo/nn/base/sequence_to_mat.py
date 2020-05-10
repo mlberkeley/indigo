@@ -75,7 +75,7 @@ class SequenceToMat(tf.keras.layers.Layer):
         diagonal_mask = tf.logical_and(tf.logical_not(mask), eye)
 
         # apply a boolean mask to the keys and values
-        scores = tf.clip_by_value(scores, -999999., 10.)
+        scores = tf.clip_by_value(scores, -999999., 6.)
         scores = tf.where(mask, scores, tf.fill(tf.shape(scores), -999999.))
         return tf.where(
             diagonal_mask, tf.fill(tf.shape(scores), 0.), scores)

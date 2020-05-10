@@ -53,8 +53,10 @@ def stick_breaking_loop_fn(x,
         1. - tf.reduce_sum(x[:, m, :n], axis=1),
         1. - tf.reduce_sum(x[:, :m, n], axis=1))
 
+    lower_bound = tf.minimum(lower_bound, upper_bound)
     p = lower_bound + b[:, m, n] * (upper_bound - lower_bound)
-    p = p[:, tf.newaxis, tf.newaxis]
+    p = tf.clip_by_value(
+        p, 0., 1.)[:, tf.newaxis, tf.newaxis]
 
     i, j = tf.meshgrid(tf.range(N), tf.range(N), indexing='ij')
     mask = tf.logical_and(
@@ -151,7 +153,7 @@ def inv_stick_breaking_loop_fn(x,
         processed with the Stick Breaking operator
     step: tf.Tensor
         the current number of iterations of the Stick Breaking operator
-        that have been applied=
+        that have been applied
 
     Returns:
 
@@ -183,9 +185,11 @@ def inv_stick_breaking_loop_fn(x,
         1. - tf.reduce_sum(x[:, m, :n], axis=1),
         1. - tf.reduce_sum(x[:, :m, n], axis=1))
 
+    lower_bound = tf.minimum(lower_bound, upper_bound)
     p = tf.math.divide_no_nan(
         x[:, m, n] - lower_bound, upper_bound - lower_bound)
-    p = tf.clip_by_value(p, 1e-7, 1 - 1e-7)[:, tf.newaxis, tf.newaxis]
+    p = tf.clip_by_value(
+        p, 1e-7, 1 - 1e-7)[:, tf.newaxis, tf.newaxis]
 
     i, j = tf.meshgrid(tf.range(N), tf.range(N), indexing='ij')
     mask = tf.logical_and(
