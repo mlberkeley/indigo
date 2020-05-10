@@ -150,7 +150,7 @@ def prepare_permutation(batch,
     # to obtain a doubly stochastic matrix
     if isinstance(order, tf.keras.Model):  # corresponds to soft orderings
         inputs.permutation = scale_gradients(
-            order(prepare_batch_for_pt(batch), training=True), 0.1)
+            order(prepare_batch_for_pt(batch), training=True), 1.0)
 
     # apply the birkhoff-von neumann decomposition to support general
     # doubly stochastic matrices

@@ -81,7 +81,7 @@ class Transformer(Sequential):
         # the encoder processes values and the decoder processes queries
         # build the encoder first in the stack
         layers.extend([EncoderLayer(
-            hidden_size, hidden_size // 2, heads,
+            hidden_size, hidden_size * 4, heads,
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout,
             values_dropout=values_dropout,
@@ -92,7 +92,7 @@ class Transformer(Sequential):
         cls = (DecoderWithPositionLayer
                if final_layer == 'indigo' else DecoderLayer)
         layers.extend([cls(
-            hidden_size, hidden_size // 2, heads,
+            hidden_size, hidden_size * 4, heads,
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout,
             values_dropout=values_dropout,
@@ -104,7 +104,7 @@ class Transformer(Sequential):
             layers.extend([Logits(num_embeddings, **kwargs)])
         if final_layer == 'indigo':
             layers.extend([PointerAfterLogits(
-                hidden_size // 2, hidden_size, num_embeddings,
+                hidden_size * 4, hidden_size, num_embeddings,
                 causal=causal, logits_per_slot=logits_per_slot, **kwargs)])
 
         super(Transformer, self).__init__(layers)

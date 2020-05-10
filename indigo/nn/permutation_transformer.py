@@ -71,7 +71,7 @@ class PermutationTransformer(Sequential):
         # the encoder processes values and the decoder processes queries
         # build the encoder first in the stack
         layers.extend([EncoderLayer(
-            hidden_size, hidden_size // 2, heads,
+            hidden_size, hidden_size * 4, heads,
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout,
             values_dropout=values_dropout,
@@ -80,7 +80,7 @@ class PermutationTransformer(Sequential):
         # depending on the type of network possibly condition on position
         # build the decoder second in the stack
         layers.extend([DecoderLayer(
-            hidden_size, hidden_size // 2, heads,
+            hidden_size, hidden_size * 4, heads,
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout,
             values_dropout=values_dropout,
@@ -89,7 +89,7 @@ class PermutationTransformer(Sequential):
         # the final layer in the transformer depends on the model purpose
         # to run Transformer-InDIGO select 'indigo'
         layers.extend([PermutationLayer(
-            hidden_size // 2,
+            hidden_size * 4,
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout,
             temperature=temperature, **kwargs)])
