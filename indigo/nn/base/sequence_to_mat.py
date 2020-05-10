@@ -78,7 +78,7 @@ class SequenceToMat(tf.keras.layers.Layer):
         scores = tf.clip_by_value(scores, -999999., 10.)
         scores = tf.where(mask, scores, tf.fill(tf.shape(scores), -999.))
         return tf.where(
-            diagonal_mask, tf.fill(tf.shape(scores), 999.), scores)
+            diagonal_mask, tf.fill(tf.shape(scores), 0.), scores)
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

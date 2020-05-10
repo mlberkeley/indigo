@@ -11,10 +11,9 @@ class PermutationLayer(Layer):
 
     def __init__(self,
                  hidden_size,
-                 heads,
                  queries_dropout=0.,
                  keys_dropout=0.,
-                 temperature=1.,
+                 temperature=10.,
                  **kwargs):
         """Creates a Transformer permutation layer by applying a multi
         head sequence to matrix layer; and then applying sinkhorn
@@ -25,9 +24,6 @@ class PermutationLayer(Layer):
         hidden_size: int
             the number of units in the hidden variables used
             in each multi head attention layer
-        heads: int
-            the number of heads in each multi head attention layer
-            a good default is 4 or 8
         queries_dropout: float
             the ratio of units to drop during training to the
             number of units in each attention layer
@@ -42,16 +38,12 @@ class PermutationLayer(Layer):
         # the core attention and processing variables
         self.stick_breaking = StickBreaking()
         self.sequence_to_mat = SequenceToMat(
-            queries_dropout=queries_dropout,
-            keys_dropout=keys_dropout)
-        self.block0 = Block(hidden_size // 2,
-                            hidden_size * 2,
-                            **kwargs)
+            queries_dropout=queries_dropout, keys_dropout=keys_dropout)
+        self.block0 = Block(hidden_size // 2, hidden_size * 2, **kwargs)
 
         # these parameters need to be stored so that
         # tf.layers.model.save_model works
         self.hidden_size = hidden_size
-        self.heads = heads
         self.queries_dropout = queries_dropout
         self.keys_dropout = keys_dropout
         self.temperature = temperature
@@ -77,13 +69,13 @@ class PermutationLayer(Layer):
         # calculate the shape of the values tensor before performing attention
         # used when separating the heads from channels
         shape = tf.shape(inputs.queries)
-        hidden_dim = self.hidden_size // self.heads
+        hidden_dim = self.hidden_size // 2
 
         # pass the input through a feed forward processing block and
         # separate heads from channels
         activations = self.block0(inputs.queries, **kwargs)
         activations = tf.transpose(tf.reshape(activations, [
-            shape[0], shape[1], self.heads, hidden_dim * 2]), [0, 2, 1, 3])
+            shape[0], shape[1], 2, hidden_dim * 2]), [0, 2, 1, 3])
 
         # convert the inputs into the standard data class format expected
         # by the attention class
@@ -97,7 +89,6 @@ class PermutationLayer(Layer):
         # pass the input through an attention processing block and
         # take the sum over the parallel attention heads
         activations = self.sequence_to_mat(attention_input, **kwargs)
-        activations = tf.reduce_sum(activations, axis=1)
 
         # apply a mask to the scores matrix so that only real
         # non terminal elements are permuted out of place
@@ -111,14 +102,14 @@ class PermutationLayer(Layer):
         shape = tf.shape(mask)
         eye = tf.eye(shape[-2], num_columns=shape[
             -1], batch_shape=shape[:-2], dtype=tf.bool)
-        mask = tf.cast(tf.logical_or(mask, eye), tf.float32)
 
         # pass the outputs of the attention through a normalization layer
         # that performs sinkhorn normalization
-        g = tfp.distributions.Gumbel(
-            loc=tf.zeros_like(activations), scale=tf.ones_like(activations))
-        return self.stick_breaking([(
-            activations + g.sample()) / self.temperature, mask], **kwargs)
+        mask = tf.cast(tf.logical_or(mask, eye), tf.float32)
+        noise = tfp.distributions.MultivariateNormalDiag(
+            loc=activations[:, 0], scale_diag=tf.exp(activations[:, 1]))
+        return self.stick_breaking([
+            noise.sample() / self.temperature, mask], **kwargs)
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
@@ -132,7 +123,6 @@ class PermutationLayer(Layer):
 
         # these are all that is needed to rebuild this class
         config = dict(hidden_size=self.hidden_size,
-                      heads=self.heads,
                       queries_dropout=self.queries_dropout,
                       keys_dropout=self.keys_dropout,
                       temperature=self.temperature,

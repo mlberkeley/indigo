@@ -285,10 +285,15 @@ class StickBreaking(tf.keras.layers.Layer):
             a permutation matrix in logistic space that has the same shape
             as the transformer attention weights"""
 
+        # calculate the z that leads to a uniform doubly stochastic matrix
+        # let this z be the center of the stick breaking logits
         x = inputs[1] / tf.reduce_sum(inputs[1], axis=1, keepdims=True)
-        offset = -tf.math.log(1. / inv_stick_breaking(x, inputs[1]) - 1.)
-        return stick_breaking(
-            tf.math.sigmoid(inputs[0] + offset), inputs[1])
+        z = inv_stick_breaking(x, inputs[1])
+
+        # in addition, account for the greater sensitivity to the operation
+        # to large values to the upper left of the logits matrix
+        return stick_breaking(tf.math.sigmoid(
+            inputs[0] - tf.math.log(1. / z - 1.)), inputs[1])
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

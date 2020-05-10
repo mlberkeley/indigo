@@ -18,7 +18,7 @@ class PermutationTransformer(Sequential):
                  keys_dropout=0.,
                  values_dropout=0.,
                  first_layer='region',
-                 temperature=1.,
+                 temperature=10.,
                  **kwargs):
         """Creates a Transformer Keras model for processing sequences
         and uses the tf.layers.Sequential as backend
@@ -89,7 +89,7 @@ class PermutationTransformer(Sequential):
         # the final layer in the transformer depends on the model purpose
         # to run Transformer-InDIGO select 'indigo'
         layers.extend([PermutationLayer(
-            hidden_size // 2, heads,
+            hidden_size // 2,
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout,
             temperature=temperature, **kwargs)])
