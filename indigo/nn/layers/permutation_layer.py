@@ -105,11 +105,16 @@ class PermutationLayer(Layer):
 
         # pass the outputs of the attention through a normalization layer
         # that performs sinkhorn normalization
-        mask = tf.cast(tf.logical_or(mask, eye), tf.float32)
+        eye_mask = tf.cast(tf.logical_or(mask, eye), tf.float32)
+        mean = (tf.reduce_sum(activations[:, 0] * eye_mask, axis=[
+            1, 2], keepdims=True) /
+                tf.reduce_sum(eye_mask, axis=[1, 2], keepdims=True))
+
         noise = tfp.distributions.MultivariateNormalDiag(
-            loc=activations[:, 0], scale_diag=tf.exp(activations[:, 1]))
+            loc=activations[:, 0] - mean,
+            scale_diag=tf.cast(mask, tf.float32) * tf.exp(activations[:, 1]))
         return self.stick_breaking([
-            noise.sample() / self.temperature, mask], **kwargs)
+            noise.sample() / self.temperature, eye_mask], **kwargs)
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
