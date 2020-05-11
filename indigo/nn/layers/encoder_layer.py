@@ -50,10 +50,10 @@ class EncoderLayer(Layer):
             keys_dropout=keys_dropout,
             values_dropout=values_dropout,
             causal=causal)
-        self.block0 = Block(hidden_size // 2,
-                            hidden_size * 3,
+        self.block0 = Block(hidden_size,
+                            input_size * 3,
                             **kwargs)
-        self.block1 = Block(input_size // 2,
+        self.block1 = Block(hidden_size,
                             input_size,
                             **kwargs)
 
@@ -87,7 +87,7 @@ class EncoderLayer(Layer):
         # calculate the shape of the values tensor before performing attention
         # used when separating the heads from channels
         shape = tf.shape(inputs.values)
-        hidden_dim = self.hidden_size // self.heads
+        hidden_dim = self.input_size // self.heads
 
         # pass the input through a feed forward processing block and
         # separate heads from channels

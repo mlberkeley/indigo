@@ -216,7 +216,7 @@ def train_faster_rcnn_dataset(train_folder,
         from words to integers"""
 
     # create a training pipeline
-    init_lr = 0.001
+    init_lr = 0.0005
     optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
     train_dataset = faster_rcnn_dataset(train_folder, batch_size)
     validate_dataset = faster_rcnn_dataset(validate_folder, batch_size)

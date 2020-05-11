@@ -10,6 +10,7 @@ import tensorflow_probability as tfp
 class PermutationLayer(Layer):
 
     def __init__(self,
+                 input_size,
                  hidden_size,
                  queries_dropout=0.,
                  keys_dropout=0.,
@@ -39,10 +40,11 @@ class PermutationLayer(Layer):
         self.stick_breaking = StickBreaking()
         self.sequence_to_mat = SequenceToMat(
             queries_dropout=queries_dropout, keys_dropout=keys_dropout)
-        self.block0 = Block(hidden_size // 2, hidden_size * 2, **kwargs)
+        self.block0 = Block(hidden_size, input_size * 2, **kwargs)
 
         # these parameters need to be stored so that
         # tf.layers.model.save_model works
+        self.input_size = input_size
         self.hidden_size = hidden_size
         self.queries_dropout = queries_dropout
         self.keys_dropout = keys_dropout
@@ -69,7 +71,7 @@ class PermutationLayer(Layer):
         # calculate the shape of the values tensor before performing attention
         # used when separating the heads from channels
         shape = tf.shape(inputs.queries)
-        hidden_dim = self.hidden_size // 2
+        hidden_dim = self.input_size // 2
 
         # pass the input through a feed forward processing block and
         # separate heads from channels
@@ -127,7 +129,8 @@ class PermutationLayer(Layer):
             layers base class and all class parameters"""
 
         # these are all that is needed to rebuild this class
-        config = dict(hidden_size=self.hidden_size,
+        config = dict(input_size=self.input_size,
+                      hidden_size=self.hidden_size,
                       queries_dropout=self.queries_dropout,
                       keys_dropout=self.keys_dropout,
                       temperature=self.temperature,
