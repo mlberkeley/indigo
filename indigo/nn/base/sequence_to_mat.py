@@ -21,6 +21,8 @@ class SequenceToMat(tf.keras.layers.Layer):
 
         self.q_dropout = tf.keras.layers.Dropout(queries_dropout)
         self.k_dropout = tf.keras.layers.Dropout(keys_dropout)
+        self.norm0 = tf.keras.layers.LayerNormalization()
+        self.norm1 = tf.keras.layers.LayerNormalization()
 
         # these parameters need to be stored so that
         # tf.layers.model.save_model works
@@ -45,8 +47,10 @@ class SequenceToMat(tf.keras.layers.Layer):
 
         # apply dropout to the queries keys and values tensor
         # requires all to be like [batch, heads, ]
-        queries = self.q_dropout(inputs.queries, **kwargs)
-        keys = self.k_dropout(inputs.keys, **kwargs)
+        queries = self.q_dropout(
+            self.norm0(inputs.queries, **kwargs), **kwargs)
+        keys = self.k_dropout(
+            self.norm1(inputs.keys, **kwargs), **kwargs)
 
         # compute the multi head soft attention weights using
         # scaled dot product attention
@@ -54,7 +58,6 @@ class SequenceToMat(tf.keras.layers.Layer):
             tf.cast(tf.shape(queries)[-1], tf.float32))
         scores = tf.matmul(
             queries, keys, transpose_b=True) / size
-        print(scores[0, 0, :, :])
 
         # if an attention bias is provided that add the attention bias
         # to the pre softmax scores matrix
@@ -76,7 +79,6 @@ class SequenceToMat(tf.keras.layers.Layer):
         diagonal_mask = tf.logical_and(tf.logical_not(mask), eye)
 
         # apply a boolean mask to the keys and values
-        #scores = tf.clip_by_value(scores, -999999., 6.)
         scores = tf.where(mask, scores, tf.fill(tf.shape(scores), -999999.))
         return tf.where(
             diagonal_mask, tf.fill(tf.shape(scores), 0.), scores)

@@ -151,6 +151,8 @@ def prepare_permutation(batch,
     if isinstance(order, tf.keras.Model):  # corresponds to soft orderings
         inputs.permutation = order(prepare_batch_for_pt(batch), training=True)
 
+    """
+
     # apply the birkhoff-von neumann decomposition to support general
     # doubly stochastic matrices
     p, c = birkhoff_von_neumann(inputs.permutation, tf.constant(20))
@@ -166,6 +168,8 @@ def prepare_permutation(batch,
         permutation_to_pointer(p) * c[..., tf.newaxis, tf.newaxis], axis=1)
     inputs.logits_labels = tf.matmul(inputs.permutation[
         :, 1:, 1:], tf.one_hot(inputs.ids, tf.cast(vocab_size, tf.int32)))
+        
+    """
 
     return inputs
 
@@ -227,16 +231,21 @@ def train_faster_rcnn_dataset(train_folder,
         inputs = prepare_permutation(b, vocab.size(), order)
         rare = get_permutation(
             b['token_indicators'], b['words'], tf.constant('rare'))
-        rare_loss = tf.reduce_mean((rare - inputs.permutation) ** 2)
+        p = tf.nn.sigmoid(inputs.permutation)
+        e = (rare - p)
+        rare_loss = tf.reduce_mean(e ** 2)
+        print(p.shape, p[0, 1, :])
+        print(e.shape, e[0, 1, :])
+        print(rare.shape, rare[0, 1, :])
 
-        mask = b['token_indicators']
-        loss, _ = model.loss(inputs, training=True)
-        loss = tf.reduce_sum(loss * mask[:, 1:], axis=1)
-        loss = loss / tf.reduce_sum(mask[:, 1:], axis=1)
-        loss = tf.reduce_mean(loss)
+        #mask = b['token_indicators']
+        #loss, _ = model.loss(inputs, training=True)
+        #loss = tf.reduce_sum(loss * mask[:, 1:], axis=1)
+        #loss = loss / tf.reduce_sum(mask[:, 1:], axis=1)
+        #loss = tf.reduce_mean(loss)
         if verbose:
             print('It: {} Train Loss: {}'.format(it, rare_loss))
-        return 0 * loss + rare_loss
+        return rare_loss
 
     def decode(b):
 

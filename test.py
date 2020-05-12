@@ -7,11 +7,11 @@ import tensorflow as tf
 if __name__ == "__main__":
 
     I = tf.one_hot(tf.random.shuffle(tf.range(22)), 22)[tf.newaxis]
-    y0 = tf.Variable(tf.random.normal([1, 1, 22, 64]) + 1.)
-    y1 = tf.Variable(tf.random.normal([1, 1, 22, 64]) + 1.)
+    yp = tf.Variable(tf.random.normal([1, 1, 22, 64]))
     optim = tf.keras.optimizers.Adam(learning_rate=0.1)
-    
 
+    d0 = tf.keras.layers.Dense(64)
+    d1 = tf.keras.layers.Dense(64)
 
     layer = SequenceToMat()
 
@@ -19,8 +19,8 @@ if __name__ == "__main__":
 
         with tf.GradientTape()as tape:
 
-            tape.watch(y0)
-            tape.watch(y1)
+            y0 = d0(yp)
+            y1 = d1(yp)
 
             mask = tf.ones([1, 22, 22])
             x = mask / 22.
@@ -41,6 +41,10 @@ if __name__ == "__main__":
             loss = tf.reduce_mean((I - p) ** 2)
             print(loss.numpy())
             print(y[0, 0])
+            print(p[0, 0])
+            print(I[0, 0])
 
-        optim.apply_gradients(zip(tape.gradient(loss, [y0, y1]), [y0, y1]))
+        var_list = d0.trainable_variables + d1.trainable_variables
+        optim.apply_gradients(
+            zip(tape.gradient(loss, var_list), var_list))
 

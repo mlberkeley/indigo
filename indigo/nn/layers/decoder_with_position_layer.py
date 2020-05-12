@@ -62,13 +62,13 @@ class DecoderWithPositionLayer(Layer):
             keys_dropout=keys_dropout,
             values_dropout=values_dropout,
             causal=False)
-        self.block2 = Block(hidden_size,
+        self.block1 = Block(hidden_size,
                             input_size,
                             **kwargs)
-        self.block3 = Block(hidden_size,
+        self.block2 = Block(hidden_size,
                             input_size * 2,
                             **kwargs)
-        self.block4 = Block(hidden_size,
+        self.block3 = Block(hidden_size,
                             input_size,
                             **kwargs)
 
@@ -138,13 +138,13 @@ class DecoderWithPositionLayer(Layer):
         # pass the input through a feed forward processing block and
         # separate heads from channels
         inputs.queries = inputs.queries + activations
-        activations = self.block2(inputs.queries, **kwargs)
+        activations = self.block1(inputs.queries, **kwargs)
         queries = tf.transpose(tf.reshape(activations, [
             s0[0], s0[1], self.heads, hidden_dim]), [0, 2, 1, 3])
 
         # pass the input through a feed forward processing block and
         # separate heads from channels
-        activations = self.block3(inputs.values, **kwargs)
+        activations = self.block2(inputs.values, **kwargs)
         activations = tf.transpose(tf.reshape(activations, [
             s1[0], s1[1], self.heads, hidden_dim * 2]), [0, 2, 1, 3])
 
@@ -167,7 +167,7 @@ class DecoderWithPositionLayer(Layer):
         # pass the outputs of the attention through another feed forward
         # processing block a residual connection
         inputs.queries = inputs.queries + activations
-        activations = self.block4(inputs.queries, **kwargs)
+        activations = self.block3(inputs.queries, **kwargs)
         inputs.queries = inputs.queries + activations
         return inputs
 

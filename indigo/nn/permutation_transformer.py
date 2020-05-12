@@ -2,6 +2,7 @@ from indigo.nn.wrappers.sequential import Sequential
 from indigo.nn.layers.encoder_layer import EncoderLayer
 from indigo.nn.layers.decoder_layer import DecoderLayer
 from indigo.nn.layers.permutation_layer import PermutationLayer
+from indigo.nn.layers.seq2mat_layer import Seq2MatLayer
 from indigo.nn.features.discrete_feature import DiscreteFeature
 from indigo.nn.features.continuous_feature import ContinuousFeature
 from indigo.nn.features.region_feature import RegionFeature
@@ -71,7 +72,7 @@ class PermutationTransformer(Sequential):
         # the encoder processes values and the decoder processes queries
         # build the encoder first in the stack
         layers.extend([EncoderLayer(
-            hidden_size, hidden_size // 2, heads,
+            hidden_size, hidden_size * 4, heads,
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout,
             values_dropout=values_dropout,
@@ -80,7 +81,7 @@ class PermutationTransformer(Sequential):
         # depending on the type of network possibly condition on position
         # build the decoder second in the stack
         layers.extend([DecoderLayer(
-            hidden_size, hidden_size // 2, heads,
+            hidden_size, hidden_size * 4, heads,
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout,
             values_dropout=values_dropout,
@@ -88,8 +89,8 @@ class PermutationTransformer(Sequential):
 
         # the final layer in the transformer depends on the model purpose
         # to run Transformer-InDIGO select 'indigo'
-        layers.extend([PermutationLayer(
-            hidden_size, hidden_size // 2,
+        layers.extend([Seq2MatLayer(
+            hidden_size, hidden_size * 4,
             queries_dropout=queries_dropout,
             keys_dropout=keys_dropout,
             temperature=temperature, **kwargs)])

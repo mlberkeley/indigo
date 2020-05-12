@@ -7,7 +7,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 
-class PermutationLayer(Layer):
+class Seq2MatLayer(Layer):
 
     def __init__(self,
                  input_size,
@@ -34,10 +34,9 @@ class PermutationLayer(Layer):
         temperature: float
             a positive number to divide the permutation logits by prior
             to applying sinkhorn normaliozation"""
-        super(PermutationLayer, self).__init__()
+        super(Seq2MatLayer, self).__init__()
 
         # the core attention and processing variables
-        self.stick_breaking = StickBreaking()
         self.sequence_to_mat = SequenceToMat(
             queries_dropout=queries_dropout, keys_dropout=keys_dropout)
         self.block0 = Block(hidden_size, input_size * 2,
@@ -91,34 +90,7 @@ class PermutationLayer(Layer):
 
         # pass the input through an attention processing block and
         # take the sum over the parallel attention heads
-        activations = self.sequence_to_mat(attention_input, **kwargs)
-
-        # apply a mask to the scores matrix so that only real
-        # non terminal elements are permuted out of place
-        mask = tf.expand_dims(inputs.queries_mask, -2)
-        mask = tf.logical_and(mask, tf.expand_dims(inputs.queries_mask, -1))
-
-        # pad tokens should not be permuted and logits on the diagonal
-        # for pad tokens should not be masked out; this is necessary because
-        # a valid permutation matrix has rows and columns that sum to one,
-        # even for rows that correspond to pad tokens
-        shape = tf.shape(mask)
-        eye = tf.eye(shape[-2], num_columns=shape[
-            -1], batch_shape=shape[:-2], dtype=tf.bool)
-        eye_mask = tf.cast(tf.logical_or(mask, eye), tf.float32)
-
-        # pass the outputs of the attention through a normalization layer
-        # that performs stick breaking normalization
-        mask = tf.cast(mask, tf.float32)
-        mean = (tf.reduce_sum(activations[:, 0] * mask, axis=[
-            1, 2], keepdims=True) /
-                tf.reduce_sum(mask, axis=[1, 2], keepdims=True))
-
-        noise = tfp.distributions.MultivariateNormalDiag(
-            loc=activations[:, 0] - mean,
-            scale_diag=mask * tf.exp(activations[:, 1] - 2.))
-        return self.stick_breaking([
-            noise.sample() / self.temperature, eye_mask], **kwargs)
+        return self.sequence_to_mat(attention_input, **kwargs)[:, 0]
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
@@ -138,6 +110,6 @@ class PermutationLayer(Layer):
                       temperature=self.temperature,
                       ** self.kwargs)
 
-        base_config = super(PermutationLayer, self).get_config()
+        base_config = super(Seq2MatLayer, self).get_config()
         return dict(list(base_config.items()) +
                     list(config.items()))
