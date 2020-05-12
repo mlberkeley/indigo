@@ -51,26 +51,29 @@ if __name__ == "__main__":
                            unknown_word="<unk>",
                            unknown_id=1)
 
-    model = Transformer(vocab.size(),
-                        args.embedding_size,
-                        args.heads,
-                        args.num_layers,
-                        queries_dropout=args.queries_dropout,
-                        keys_dropout=args.keys_dropout,
-                        values_dropout=args.values_dropout,
-                        causal=True,
-                        first_layer=args.first_layer,
-                        final_layer=args.final_layer)
+    strategy = tf.distribute.MirroredStrategy()
+    with strategy.scope():
 
-    if args.order == 'soft':
-        order = PermutationTransformer(vocab.size(),
-                                       args.embedding_size,
-                                       args.heads,
-                                       args.num_layers,
-                                       queries_dropout=args.queries_dropout,
-                                       keys_dropout=args.keys_dropout,
-                                       values_dropout=args.values_dropout,
-                                       first_layer=args.first_layer)
+        model = Transformer(vocab.size(),
+                            args.embedding_size,
+                            args.heads,
+                            args.num_layers,
+                            queries_dropout=args.queries_dropout,
+                            keys_dropout=args.keys_dropout,
+                            values_dropout=args.values_dropout,
+                            causal=True,
+                            first_layer=args.first_layer,
+                            final_layer=args.final_layer)
+
+        if args.order == 'soft':
+            order = PermutationTransformer(vocab.size(),
+                                           args.embedding_size,
+                                           args.heads,
+                                           args.num_layers,
+                                           queries_dropout=args.queries_dropout,
+                                           keys_dropout=args.keys_dropout,
+                                           values_dropout=args.values_dropout,
+                                           first_layer=args.first_layer)
 
     train_faster_rcnn_dataset(args.train_folder,
                               args.validate_folder,
@@ -80,4 +83,5 @@ if __name__ == "__main__":
                               model,
                               args.model_ckpt,
                               order if args.order == 'soft' else args.order,
-                              vocab)
+                              vocab,
+                              strategy)

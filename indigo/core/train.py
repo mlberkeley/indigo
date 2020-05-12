@@ -10,6 +10,15 @@ import tensorflow as tf
 import os
 
 
+class Null(object):
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
 def prepare_batch_for_lm(batch):
     """Transform a batch dictionary into a dataclass standard format
     for the transformer to process
@@ -167,7 +176,8 @@ def train_faster_rcnn_dataset(train_folder,
                               model,
                               model_ckpt,
                               order,
-                              vocab):
+                              vocab,
+                              strategy):
     """Trains a transformer based caption model using features extracted
     using a facter rcnn object detection model
 
@@ -201,107 +211,137 @@ def train_faster_rcnn_dataset(train_folder,
         l2r or r2l for now, will support soft orders later
     vocab: Vocabulary
         the model vocabulary which contains mappings
-        from words to integers"""
+        from words to integers
+    strategy: tf.distribute.Strategy
+        the strategy to use when distributing a model across many gpus
+        typically a Mirrored Strategy"""
 
     # create a training pipeline
-    init_lr = 0.00005
-    optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
-    train_dataset = faster_rcnn_dataset(train_folder, batch_size)
-    validate_dataset = faster_rcnn_dataset(validate_folder,
-                                           batch_size, shuffle=False)
+    with strategy.scope():
 
-    def loss_function(it, b, verbose=False):
+        # distribute the datasets using the strategy
+        train_dataset = strategy.experimental_distribute_dataset(
+            faster_rcnn_dataset(train_folder, batch_size))
+        validate_dataset = strategy.experimental_distribute_dataset(
+            faster_rcnn_dataset(validate_folder,
+                                batch_size, shuffle=False))
 
-        # process the dataset batch dictionary into the standard
-        # model input format
-        loss, _ = model.loss(
-            prepare_permutation(b, vocab.size(), order), training=True)
-        loss = tf.reduce_sum(loss * b['token_indicators'][:, 1:], axis=1)
-        loss = loss / tf.reduce_sum(b['token_indicators'][:, 1:], axis=1)
-        loss = tf.reduce_mean(loss)
-        if verbose:
-            print('It: {} Train Loss: {}'.format(it, loss))
-        return loss
+        def loss_function(b):
 
-    def decode(b):
+            # process the dataset batch dictionary into the standard
+            # model input format
+            loss, _ = model.loss(
+                prepare_permutation(b, vocab.size(), order), training=True)
+            loss = tf.reduce_sum(loss * b['token_indicators'][:, 1:], axis=1)
+            return loss / tf.reduce_sum(b['token_indicators'][:, 1:], axis=1)
 
-        # calculate the ground truth sequence for this batch; and
-        # perform beam search using the current model
-        inputs = prepare_batch_for_lm(b)
-        out = tf.strings.reduce_join(
-            vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
-        cap, log_p = beam_search(
-            inputs, model, beam_size=beam_size, max_iterations=20)
-        cap = tf.strings.reduce_join(
-            vocab.ids_to_words(cap), axis=2, separator=' ')
+        def wrapped_loss_function(b):
 
-        # show several model predicted sequences and their likelihoods
-        for i in range(cap.shape[0]):
-            print("Label: {}".format(out[i].numpy().decode('utf8')))
-            for c, p in zip(cap[i].numpy(), tf.math.exp(log_p)[i].numpy()):
-                print("[p = {}] Model: {}".format(p, c.decode('utf8')))
+            # distribute the model across many gpus using a distributed strategy
+            # do this by wrapping the loss function using data parallelism
+            result = strategy.run(loss_function, args=(b,))
+            return strategy.reduce(tf.distribute.ReduceOp.MEAN, result, axis=0)
 
-    def validate():
+        def decode_function(b):
 
-        # accumulate the validation loss across the entire dataset
-        # weight the loss by the batch size and normalize
-        # the loss to an expected value
-        denom, loss = 0.0, 0.0
-        for b in validate_dataset:
-            n = tf.cast(tf.shape(b['words'])[0], tf.float32)
-            denom, loss = denom + n, loss + n * loss_function(0, b)
-        return loss / denom
+            # calculate the ground truth sequence for this batch; and
+            # perform beam search using the current model
+            # show several model predicted sequences and their likelihoods
+            inputs = prepare_batch_for_lm(b)
+            out = tf.strings.reduce_join(
+                vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
+            cap, log_p = beam_search(
+                inputs, model, beam_size=beam_size, max_iterations=20)
+            cap = tf.strings.reduce_join(
+                vocab.ids_to_words(cap), axis=2, separator=' ')
+            for i in range(cap.shape[0]):
+                print("Label: {}".format(out[i].numpy().decode('utf8')))
+                for c, p in zip(cap[i].numpy(), tf.math.exp(log_p)[i].numpy()):
+                    print("[p = {}] Model: {}".format(p, c.decode('utf8')))
 
-    # run an initial forward pass using the model in order to build the
-    # weights and define the shapes at every layer
-    for batch in train_dataset.take(1):
-        loss_function(-1, batch, verbose=False)
+        def wrapped_decode_function(b):
 
-    # restore an existing model if one exists and create a directory
-    # if the ckpt directory does not exist
-    tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
-    if tf.io.gfile.exists(model_ckpt + '.index'):
-        model.load_weights(model_ckpt)
-    if tf.io.gfile.exists(model_ckpt + '.order.index'):
-        order.load_weights(model_ckpt + '.order')
+            # distribute the model across many gpus using a distributed strategy
+            # do this by wrapping the loss function using data parallelism
+            return strategy.run(decode_function, args=(b,))
 
-    # set up variables for early stopping; only save checkpoints when
-    # best validation loss has improved
-    best_loss = validate()
-    var_list = model.trainable_variables
-    if isinstance(order, tf.keras.Model):
-        var_list = var_list + order.trainable_variables
+        def validate():
 
-    # training for a pre specified number of epochs while also annealing
-    # the learning rate linearly towards zero
-    iteration = 0
-    for epoch in range(num_epoch):
+            # accumulate the validation loss across the entire dataset
+            # weight the loss by the batch size and normalize
+            # the loss to an expected value
+            denom, loss = 0.0, 0.0
+            for b in validate_dataset:
+                n = tf.cast(tf.shape(b['words'])[0], tf.float32)
+                denom, loss = denom + n, loss + n * wrapped_loss_function(b)
+            return loss / denom
 
-        # loop through the entire dataset once (one epoch)
-        for batch in train_dataset:
+        # set up variables for early stopping; only save checkpoints when
+        # best validation loss has improved
+        best_loss = validate()
+        var_list = model.trainable_variables
+        if isinstance(order, tf.keras.Model):
+            var_list = var_list + order.trainable_variables
 
-            # keras requires the loss be a function
-            optim.minimize(lambda: loss_function(
-                iteration, batch, verbose=True), var_list)
-            if iteration % 100 == 0:
-                decode(batch)
+        # restore an existing model if one exists and create a directory
+        # if the ckpt directory does not exist
+        tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
+        if tf.io.gfile.exists(model_ckpt + '.index'):
+            model.load_weights(model_ckpt)
+        if tf.io.gfile.exists(model_ckpt + '.order.index'):
+            order.load_weights(model_ckpt + '.order')
 
-            # increment the number of training steps so far; note this
-            # does not save with the model and is reset when loading a
-            # pre trained model from the disk
-            iteration += 1
+        # create an optimizer
+        init_lr = 0.00005
+        optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
 
-        # anneal the model learning rate after an epoch
-        optim.lr.assign(init_lr * (1 - (epoch + 1) / num_epoch))
+        def step_function(b):
 
-        # normalize the validation loss per validation example
-        validation_loss = validate()
-        print('It: {} Val Loss: {}'.format(iteration, validation_loss))
+            # performing a gradient descent step on a batch of data
+            # this function returns loss, and is compatible with tf.distribute
+            with tf.GradientTape() as tape:
+                loss = loss_function(b)
+            grads = tape.gradient(loss, var_list)
+            optim.apply_gradients(list(zip(grads, var_list)))
+            return loss
 
-        # save once at the end of every epoch; but only save when
-        # the validation loss becomes smaller
-        if best_loss > validation_loss:
-            best_loss = validation_loss
-            model.save_weights(model_ckpt, save_format='tf')
-            if isinstance(order, tf.keras.Model):
-                order.save_weights(model_ckpt + '.order')
+        def wrapped_step_function(b):
+
+            # distribute the model across many gpus using a distributed strategy
+            # do this by wrapping the loss function using data parallelism
+            result = strategy.run(step_function, args=(b,))
+            return strategy.reduce(tf.distribute.ReduceOp.MEAN, result, axis=0)
+
+        # training for a pre specified number of epochs while also annealing
+        # the learning rate linearly towards zero
+        iteration = 0
+        for epoch in range(num_epoch):
+
+            # loop through the entire dataset once (one epoch)
+            for batch in train_dataset:
+
+                # keras requires the loss be a function
+                print("It: {} Train Loss: {}".format(
+                    iteration, wrapped_step_function(batch)))
+                if iteration % 100 == 0:
+                    wrapped_decode_function(batch)
+
+                # increment the number of training steps so far; note this
+                # does not save with the model and is reset when loading a
+                # pre trained model from the disk
+                iteration += 1
+
+            # anneal the model learning rate after an epoch
+            optim.lr.assign(init_lr * (1 - (epoch + 1) / num_epoch))
+
+            # normalize the validation loss per validation example
+            validation_loss = validate()
+            print('It: {} Val Loss: {}'.format(iteration, validation_loss))
+
+            # save once at the end of every epoch; but only save when
+            # the validation loss becomes smaller
+            if best_loss > validation_loss:
+                best_loss = validation_loss
+                model.save_weights(model_ckpt, save_format='tf')
+                if isinstance(order, tf.keras.Model):
+                    order.save_weights(model_ckpt + '.order')
