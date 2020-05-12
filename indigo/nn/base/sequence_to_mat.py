@@ -54,6 +54,7 @@ class SequenceToMat(tf.keras.layers.Layer):
             tf.cast(tf.shape(queries)[-1], tf.float32))
         scores = tf.matmul(
             queries, keys, transpose_b=True) / size
+        print(scores[0, 0, :, :])
 
         # if an attention bias is provided that add the attention bias
         # to the pre softmax scores matrix
@@ -75,7 +76,7 @@ class SequenceToMat(tf.keras.layers.Layer):
         diagonal_mask = tf.logical_and(tf.logical_not(mask), eye)
 
         # apply a boolean mask to the keys and values
-        scores = tf.clip_by_value(scores, -999999., 6.)
+        #scores = tf.clip_by_value(scores, -999999., 6.)
         scores = tf.where(mask, scores, tf.fill(tf.shape(scores), -999999.))
         return tf.where(
             diagonal_mask, tf.fill(tf.shape(scores), 0.), scores)

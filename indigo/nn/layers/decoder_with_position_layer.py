@@ -53,9 +53,6 @@ class DecoderWithPositionLayer(Layer):
         self.block0 = Block(hidden_size,
                             input_size * 3,
                             **kwargs)
-        self.block1 = Block(hidden_size,
-                            input_size,
-                            **kwargs)
         self.pos_embedding = tf.keras.layers.Dense(
             input_size, **kwargs)
 
@@ -138,13 +135,9 @@ class DecoderWithPositionLayer(Layer):
         activations = tf.reshape(tf.transpose(activations, [
             0, 2, 1, 3]), [s0[0], s0[1], self.heads * hidden_dim])
 
-        # pass the outputs of the attention through another feed forward
-        # processing block a residual connection
-        activations = self.block1(activations, **kwargs)
-        inputs.queries = inputs.queries + activations
-
         # pass the input through a feed forward processing block and
         # separate heads from channels
+        inputs.queries = inputs.queries + activations
         activations = self.block2(inputs.queries, **kwargs)
         queries = tf.transpose(tf.reshape(activations, [
             s0[0], s0[1], self.heads, hidden_dim]), [0, 2, 1, 3])
@@ -173,7 +166,8 @@ class DecoderWithPositionLayer(Layer):
 
         # pass the outputs of the attention through another feed forward
         # processing block a residual connection
-        activations = self.block4(activations, **kwargs)
+        inputs.queries = inputs.queries + activations
+        activations = self.block4(inputs.queries, **kwargs)
         inputs.queries = inputs.queries + activations
         return inputs
 

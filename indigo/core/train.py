@@ -149,8 +149,7 @@ def prepare_permutation(batch,
     # pass the training example through the permutation transformer
     # to obtain a doubly stochastic matrix
     if isinstance(order, tf.keras.Model):  # corresponds to soft orderings
-        inputs.permutation = scale_gradients(
-            order(prepare_batch_for_pt(batch), training=True), 1.0)
+        inputs.permutation = order(prepare_batch_for_pt(batch), training=True)
 
     # apply the birkhoff-von neumann decomposition to support general
     # doubly stochastic matrices
@@ -216,24 +215,28 @@ def train_faster_rcnn_dataset(train_folder,
         from words to integers"""
 
     # create a training pipeline
-    init_lr = 0.0005
+    init_lr = 0.001
     optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
-    train_dataset = faster_rcnn_dataset(train_folder, batch_size)
-    validate_dataset = faster_rcnn_dataset(validate_folder, batch_size)
+    train_dataset = faster_rcnn_dataset(train_folder, 1, shuffle=False)
+    validate_dataset = faster_rcnn_dataset(validate_folder, 1, shuffle=False)
 
     def loss_function(it, b, verbose=False):
 
         # process the dataset batch dictionary into the standard
         # model input format
         inputs = prepare_permutation(b, vocab.size(), order)
+        rare = get_permutation(
+            b['token_indicators'], b['words'], tf.constant('rare'))
+        rare_loss = tf.reduce_mean((rare - inputs.permutation) ** 2)
+
         mask = b['token_indicators']
         loss, _ = model.loss(inputs, training=True)
         loss = tf.reduce_sum(loss * mask[:, 1:], axis=1)
         loss = loss / tf.reduce_sum(mask[:, 1:], axis=1)
         loss = tf.reduce_mean(loss)
         if verbose:
-            print('It: {} Train Loss: {}'.format(it, loss))
-        return loss
+            print('It: {} Train Loss: {}'.format(it, rare_loss))
+        return 0 * loss + rare_loss
 
     def decode(b):
 
@@ -292,16 +295,18 @@ def train_faster_rcnn_dataset(train_folder,
         # loop through the entire dataset once (one epoch)
         for batch in train_dataset:
 
-            # keras requires the loss be a function
-            optim.minimize(lambda: loss_function(
-                iteration, batch, verbose=True), var_list)
-            if iteration % 100 == 0:
-                decode(batch)
+            for _ in range(1000):
 
-            # increment the number of training steps so far; note this
-            # does not save with the model and is reset when loading a
-            # pre trained model from the disk
-            iteration += 1
+                # keras requires the loss be a function
+                optim.minimize(lambda: loss_function(
+                    iteration, batch, verbose=True), var_list)
+                if iteration % 100 == 0:
+                    decode(batch)
+
+                # increment the number of training steps so far; note this
+                # does not save with the model and is reset when loading a
+                # pre trained model from the disk
+                iteration += 1
 
         # anneal the model learning rate after an epoch
         optim.lr.assign(init_lr * (1 - (epoch + 1) / num_epoch))

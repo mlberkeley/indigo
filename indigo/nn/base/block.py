@@ -26,28 +26,24 @@ class Block(tf.keras.Sequential):
         # order of variables is the same as a typical 'resnet'
         norm0 = tf.keras.layers.LayerNormalization(**kwargs)
         relu0 = tf.keras.layers.Activation(activation)
-        conv0 = tf.keras.layers.Conv1D(hidden_size,
-                                       1,
-                                       padding='same',
-                                       activation=None,
-                                       **kwargs)
+        fc0 = tf.keras.layers.Dense(hidden_size,
+                                    activation=None,
+                                    **kwargs)
 
         norm1 = tf.keras.layers.LayerNormalization(**kwargs)
         relu1 = tf.keras.layers.Activation(activation)
-        conv1 = tf.keras.layers.Conv1D(output_size,
-                                       1,
-                                       padding='same',
-                                       activation=None,
-                                       **kwargs)
+        fc1 = tf.keras.layers.Dense(output_size,
+                                    activation=None,
+                                    **kwargs)
 
         # the sequential provides a common interface
         # for forward propagation
         super(Block, self).__init__([norm0,
                                      relu0,
-                                     conv0,
+                                     fc0,
                                      norm1,
                                      relu1,
-                                     conv1])
+                                     fc1])
 
         # these parameters need to be stored so that
         # tf.layers.model.save_model works

@@ -113,7 +113,8 @@ class EncoderLayer(Layer):
 
         # pass the outputs of the attention through another feed forward
         # processing block a residual connection
-        activations = self.block1(activations, **kwargs)
+        inputs.values = inputs.values + activations
+        activations = self.block1(inputs.values, **kwargs)
         inputs.values = inputs.values + activations
         return inputs
 
