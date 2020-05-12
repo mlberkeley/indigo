@@ -151,8 +151,6 @@ def prepare_permutation(batch,
     if isinstance(order, tf.keras.Model):  # corresponds to soft orderings
         inputs.permutation = order(prepare_batch_for_pt(batch), training=True)
 
-    """
-
     # apply the birkhoff-von neumann decomposition to support general
     # doubly stochastic matrices
     p, c = birkhoff_von_neumann(inputs.permutation, tf.constant(20))
@@ -168,8 +166,6 @@ def prepare_permutation(batch,
         permutation_to_pointer(p) * c[..., tf.newaxis, tf.newaxis], axis=1)
     inputs.logits_labels = tf.matmul(inputs.permutation[
         :, 1:, 1:], tf.one_hot(inputs.ids, tf.cast(vocab_size, tf.int32)))
-        
-    """
 
     return inputs
 
@@ -219,33 +215,26 @@ def train_faster_rcnn_dataset(train_folder,
         from words to integers"""
 
     # create a training pipeline
-    init_lr = 0.001
+    init_lr = 0.00005
     optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
-    train_dataset = faster_rcnn_dataset(train_folder, 1, shuffle=False)
-    validate_dataset = faster_rcnn_dataset(validate_folder, 1, shuffle=False)
+    train_dataset = faster_rcnn_dataset(
+        train_folder, batch_size, shuffle=True)
+    validate_dataset = faster_rcnn_dataset(
+        validate_folder, batch_size, shuffle=False)
 
     def loss_function(it, b, verbose=False):
 
         # process the dataset batch dictionary into the standard
         # model input format
         inputs = prepare_permutation(b, vocab.size(), order)
-        rare = get_permutation(
-            b['token_indicators'], b['words'], tf.constant('rare'))
-        p = tf.nn.sigmoid(inputs.permutation)
-        e = (rare - p)
-        rare_loss = tf.reduce_mean(e ** 2)
-        print(p.shape, p[0, 1, :])
-        print(e.shape, e[0, 1, :])
-        print(rare.shape, rare[0, 1, :])
-
-        #mask = b['token_indicators']
-        #loss, _ = model.loss(inputs, training=True)
-        #loss = tf.reduce_sum(loss * mask[:, 1:], axis=1)
-        #loss = loss / tf.reduce_sum(mask[:, 1:], axis=1)
-        #loss = tf.reduce_mean(loss)
+        mask = b['token_indicators']
+        loss, _ = model.loss(inputs, training=True)
+        loss = tf.reduce_sum(loss * mask[:, 1:], axis=1)
+        loss = loss / tf.reduce_sum(mask[:, 1:], axis=1)
+        loss = tf.reduce_mean(loss)
         if verbose:
-            print('It: {} Train Loss: {}'.format(it, rare_loss))
-        return rare_loss
+            print('It: {} Train Loss: {}'.format(it, loss))
+        return loss
 
     def decode(b):
 
@@ -304,18 +293,16 @@ def train_faster_rcnn_dataset(train_folder,
         # loop through the entire dataset once (one epoch)
         for batch in train_dataset:
 
-            for _ in range(1000):
+            # keras requires the loss be a function
+            optim.minimize(lambda: loss_function(
+                iteration, batch, verbose=True), var_list)
+            if iteration % 100 == 0:
+                decode(batch)
 
-                # keras requires the loss be a function
-                optim.minimize(lambda: loss_function(
-                    iteration, batch, verbose=True), var_list)
-                if iteration % 100 == 0:
-                    decode(batch)
-
-                # increment the number of training steps so far; note this
-                # does not save with the model and is reset when loading a
-                # pre trained model from the disk
-                iteration += 1
+            # increment the number of training steps so far; note this
+            # does not save with the model and is reset when loading a
+            # pre trained model from the disk
+            iteration += 1
 
         # anneal the model learning rate after an epoch
         optim.lr.assign(init_lr * (1 - (epoch + 1) / num_epoch))
