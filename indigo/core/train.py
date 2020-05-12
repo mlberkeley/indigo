@@ -7,18 +7,7 @@ from indigo.permutation_utils import permutation_to_pointer
 from indigo.permutation_utils import permutation_to_relative
 from indigo.permutation_utils import get_permutation
 import tensorflow as tf
-import numpy as np
 import os
-
-
-np.set_printoptions(threshold=np.inf)
-
-
-@tf.custom_gradient
-def scale_gradients(x, gamma):
-    def grad(dy):
-        return dy * gamma, 0.0
-    return x, grad
 
 
 def prepare_batch_for_lm(batch):
@@ -217,20 +206,18 @@ def train_faster_rcnn_dataset(train_folder,
     # create a training pipeline
     init_lr = 0.00005
     optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
-    train_dataset = faster_rcnn_dataset(
-        train_folder, batch_size, shuffle=True)
-    validate_dataset = faster_rcnn_dataset(
-        validate_folder, batch_size, shuffle=False)
+    train_dataset = faster_rcnn_dataset(train_folder, batch_size)
+    validate_dataset = faster_rcnn_dataset(validate_folder,
+                                           batch_size, shuffle=False)
 
     def loss_function(it, b, verbose=False):
 
         # process the dataset batch dictionary into the standard
         # model input format
-        inputs = prepare_permutation(b, vocab.size(), order)
-        mask = b['token_indicators']
-        loss, _ = model.loss(inputs, training=True)
-        loss = tf.reduce_sum(loss * mask[:, 1:], axis=1)
-        loss = loss / tf.reduce_sum(mask[:, 1:], axis=1)
+        loss, _ = model.loss(
+            prepare_permutation(b, vocab.size(), order), training=True)
+        loss = tf.reduce_sum(loss * b['token_indicators'][:, 1:], axis=1)
+        loss = loss / tf.reduce_sum(b['token_indicators'][:, 1:], axis=1)
         loss = tf.reduce_mean(loss)
         if verbose:
             print('It: {} Train Loss: {}'.format(it, loss))
