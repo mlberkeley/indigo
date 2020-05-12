@@ -2,7 +2,6 @@ from indigo.nn.wrappers.sequential import Sequential
 from indigo.nn.layers.encoder_layer import EncoderLayer
 from indigo.nn.layers.decoder_layer import DecoderLayer
 from indigo.nn.layers.permutation_layer import PermutationLayer
-from indigo.nn.layers.seq2mat_layer import Seq2MatLayer
 from indigo.nn.features.discrete_feature import DiscreteFeature
 from indigo.nn.features.continuous_feature import ContinuousFeature
 from indigo.nn.features.region_feature import RegionFeature
