@@ -2,7 +2,7 @@ from setuptools import find_packages
 from setuptools import setup
 
 
-REQUIRED_PACKAGES = ['tensorflow==2.1',
+REQUIRED_PACKAGES = ['tensorflow==2.2',
                      'tensorflow-probability',
                      'torch',
                      'torchvision',
