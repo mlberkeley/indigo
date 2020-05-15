@@ -40,7 +40,7 @@ if __name__ == "__main__":
         default='indigo', choices=['indigo', 'logits'])
     parser.add_argument(
         '--order', type=str,
-        default='soft', choices=['l2r', 'r2l', 'rare', 'common', 'soft'])
+        default='l2r', choices=['l2r', 'r2l', 'rare', 'common'])
     args = parser.parse_args()
 
     with tf.io.gfile.GFile(args.vocab_file, "r") as f:

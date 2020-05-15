@@ -121,7 +121,7 @@ def pretrain_faster_rcnn_dataset(train_folder,
         # show several permutations and the sentences
         inputs = prepare_batch_for_pt(b)
         out = tf.strings.reduce_join(
-            vocab.ids_to_words(inputs.ids), axis=1, separator=' ')
+            vocab.ids_to_words(b['words']), axis=1, separator=' ')
         mat = model(inputs, training=True)
         for i in range(out.shape[0]):
             print("Label: {}".format(out[i].numpy().decode('utf8')))
