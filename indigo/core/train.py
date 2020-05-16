@@ -227,7 +227,6 @@ def train_faster_rcnn_dataset(train_folder,
                                 batch_size, shuffle=False))
 
         def loss_function(b):
-
             # process the dataset batch dictionary into the standard
             # model input format
             loss, _ = model.loss(
@@ -236,14 +235,12 @@ def train_faster_rcnn_dataset(train_folder,
             return loss / tf.reduce_sum(b['token_indicators'][:, 1:], axis=1)
 
         def wrapped_loss_function(b):
-
             # distribute the model across many gpus using a distributed strategy
             # do this by wrapping the loss function using data parallelism
             result = strategy.run(loss_function, args=(b,))
             return strategy.reduce(tf.distribute.ReduceOp.MEAN, result, axis=0)
 
         def decode_function(b):
-
             # calculate the ground truth sequence for this batch; and
             # perform beam search using the current model
             # show several model predicted sequences and their likelihoods
@@ -260,19 +257,21 @@ def train_faster_rcnn_dataset(train_folder,
                     print("[p = {}] Model: {}".format(p, c.decode('utf8')))
 
         def wrapped_decode_function(b):
-
             # distribute the model across many gpus using a distributed strategy
             # do this by wrapping the loss function using data parallelism
-            return strategy.run(decode_function, args=(b,))
+            x = strategy.run(decode_function, args=(b,))
+            return tf.concat(
+                x.values, axis=0) if strategy.num_replicas_in_sync > 1 else x
 
         def validate():
-
             # accumulate the validation loss across the entire dataset
             # weight the loss by the batch size and normalize
             # the loss to an expected value
             denom, loss = 0.0, 0.0
             for b in validate_dataset:
-                n = tf.cast(tf.shape(b['words'])[0], tf.float32)
+                n = tf.cast(tf.shape(tf.concat(b['words'], axis=0)
+                    if strategy.num_replicas_in_sync > 1
+                    else b['words'])[0], tf.float32)
                 denom, loss = denom + n, loss + n * wrapped_loss_function(b)
             return loss / denom
 
@@ -286,9 +285,9 @@ def train_faster_rcnn_dataset(train_folder,
         # restore an existing model if one exists and create a directory
         # if the ckpt directory does not exist
         tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
-        if tf.io.gfile.exists(model_ckpt + '.index'):
+        if tf.io.gfile.exists(model_ckpt):
             model.load_weights(model_ckpt)
-        if tf.io.gfile.exists(model_ckpt + '.order.index'):
+        if tf.io.gfile.exists(model_ckpt + '.order'):
             order.load_weights(model_ckpt + '.order')
 
         # create an optimizer
@@ -296,7 +295,6 @@ def train_faster_rcnn_dataset(train_folder,
         optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
 
         def step_function(b):
-
             # performing a gradient descent step on a batch of data
             # this function returns loss, and is compatible with tf.distribute
             with tf.GradientTape() as tape:
@@ -306,7 +304,6 @@ def train_faster_rcnn_dataset(train_folder,
             return loss
 
         def wrapped_step_function(b):
-
             # distribute the model across many gpus using a distributed strategy
             # do this by wrapping the loss function using data parallelism
             result = strategy.run(step_function, args=(b,))
@@ -342,6 +339,6 @@ def train_faster_rcnn_dataset(train_folder,
             # the validation loss becomes smaller
             if best_loss > validation_loss:
                 best_loss = validation_loss
-                model.save_weights(model_ckpt, save_format='tf')
+                model.save_weights(model_ckpt)
                 if isinstance(order, tf.keras.Model):
                     order.save_weights(model_ckpt + '.order')
