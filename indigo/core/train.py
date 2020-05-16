@@ -257,8 +257,8 @@ def train_faster_rcnn_dataset(train_folder,
                     print("[p = {}] Model: {}".format(p, c.decode('utf8')))
 
         def wrapped_decode_function(b):
-            # distribute the model across many gpus using a distributed strategy
-            # do this by wrapping the loss function using data parallelism
+            # distribute the model across many gpus using a strategy
+            # do this by wrapping the loss function
             x = strategy.run(decode_function, args=(b,))
             return tf.concat(
                 x.values, axis=0) if strategy.num_replicas_in_sync > 1 else x
@@ -269,7 +269,7 @@ def train_faster_rcnn_dataset(train_folder,
             # the loss to an expected value
             denom, loss = 0.0, 0.0
             for b in validate_dataset:
-                n = tf.cast(tf.shape(tf.concat(b['words'], axis=0)
+                n = tf.cast(tf.shape(tf.concat(b['words'].values, axis=0)
                     if strategy.num_replicas_in_sync > 1
                     else b['words'])[0], tf.float32)
                 denom, loss = denom + n, loss + n * wrapped_loss_function(b)
