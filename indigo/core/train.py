@@ -223,8 +223,7 @@ def train_faster_rcnn_dataset(train_folder,
         train_dataset = strategy.experimental_distribute_dataset(
             faster_rcnn_dataset(train_folder, batch_size))
         validate_dataset = strategy.experimental_distribute_dataset(
-            faster_rcnn_dataset(validate_folder,
-                                batch_size, shuffle=False))
+            faster_rcnn_dataset(validate_folder, batch_size, shuffle=False))
 
         def loss_function(b):
             # process the dataset batch dictionary into the standard
@@ -289,8 +288,8 @@ def train_faster_rcnn_dataset(train_folder,
         # best validation loss has improved
         best_loss = validate()
         vars = model.trainable_variables
-        pt_vars = order.trainable_variables if isinstance(
-            order, tf.keras.Model) else []
+        pt_vars = order.trainable_variables \
+            if isinstance(order, tf.keras.Model) else []
 
         # create an optimizer
         init_lr = 0.001
@@ -316,22 +315,18 @@ def train_faster_rcnn_dataset(train_folder,
 
         # training for a pre specified number of epochs while annealing
         # the learning rate linearly towards zero
-        iteration = 0
+        iteration = -1
         for epoch in range(num_epoch):
 
             # loop through the entire dataset once (one epoch)
             for batch in train_dataset:
+                iteration += 1
 
                 # keras requires the loss be a function
                 print("It: {} Train Loss: {}".format(
                     iteration, wrapped_step_function(batch)))
                 if iteration % 100 == 0:
                     wrapped_decode_function(batch)
-
-                # increment the number of training steps so far; note this
-                # does not save with the model and is reset when loading a
-                # pre trained model from the disk
-                iteration += 1
 
             # anneal the model learning rate after an epoch
             optim.lr.assign(init_lr * (1 - (epoch + 1) / num_epoch))
