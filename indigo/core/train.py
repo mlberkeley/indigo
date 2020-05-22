@@ -277,10 +277,7 @@ def train_faster_rcnn_dataset(train_folder,
         # restore an existing model if one exists and create a directory
         # if the ckpt directory does not exist
         for batch in train_dataset:
-            beam_search(prepare_batch_for_lm(batch), model,
-                        beam_size=beam_size, max_iterations=30)
-            if isinstance(order, tf.keras.Model):
-                order(prepare_batch_for_pt(batch))
+            wrapped_loss_function(batch)
             break
         tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
         if tf.io.gfile.exists(model_ckpt):
@@ -291,20 +288,23 @@ def train_faster_rcnn_dataset(train_folder,
         # set up variables for early stopping; only save checkpoints when
         # best validation loss has improved
         best_loss = validate()
-        var_list = model.trainable_variables
-        if isinstance(order, tf.keras.Model):
-            var_list = var_list + order.trainable_variables
+        vars = model.trainable_variables
+        pt_vars = order.trainable_variables if isinstance(
+            order, tf.keras.Model) else []
 
         # create an optimizer
-        init_lr = 0.0005
+        init_lr = 0.001
+        pt_init_lr = 0.0001
         optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
+        pt_optim = tf.keras.optimizers.Adam(learning_rate=pt_init_lr)
 
         def step_function(b):
             # performing a gradient descent step on a batch of data
             with tf.GradientTape() as tape:
                 loss = loss_function(b)
-            grads = tape.gradient(loss, var_list)
-            optim.apply_gradients(list(zip(grads, var_list)))
+            grads = tape.gradient(loss, vars + pt_vars)
+            optim.apply_gradients(list(zip(grads[:len(vars)], vars)))
+            pt_optim.apply_gradients(list(zip(grads[len(vars):], pt_vars)))
             return loss
 
         def wrapped_step_function(b):
@@ -314,7 +314,7 @@ def train_faster_rcnn_dataset(train_folder,
             return strategy.reduce(
                 tf.distribute.ReduceOp.MEAN, result, axis=0)
 
-        # training for a pre specified number of epochs while also annealing
+        # training for a pre specified number of epochs while annealing
         # the learning rate linearly towards zero
         iteration = 0
         for epoch in range(num_epoch):
@@ -335,6 +335,7 @@ def train_faster_rcnn_dataset(train_folder,
 
             # anneal the model learning rate after an epoch
             optim.lr.assign(init_lr * (1 - (epoch + 1) / num_epoch))
+            pt_optim.lr.assign(pt_init_lr * (1 - (epoch + 1) / num_epoch))
 
             # normalize the validation loss per validation example
             validation_loss = validate()
