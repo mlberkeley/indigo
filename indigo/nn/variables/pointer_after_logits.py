@@ -66,12 +66,11 @@ class PointerAfterLogits(Pointer):
 
         # map the sequence into a latent space
         features = self.block(inputs.queries, **kwargs)
-        q = features[..., :self.output_size]
         b = self.logits_embedding(inputs.ids)
         if hasattr(inputs, 'permutation') and \
                 inputs.permutation is not None:
             b = tf.matmul(inputs.permutation[:, 1:, 1:], b)
-        q = q + b
+        q = b + features[..., :self.output_size]
 
         # reshape keys to have logits_per_slot more time steps
         shape = tf.multiply(tf.shape(q), [1, self.logits_per_slot, 1])
