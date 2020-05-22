@@ -131,9 +131,18 @@ def inspect_order_faster_rcnn_dataset(tfrecord_folder,
 
     # create a validation pipeline
     dataset = faster_rcnn_dataset(tfrecord_folder, batch_size, shuffle=False)
+
+    # run the model for a single forward pass
+    # and load en existing checkpoint into the trained model
+    for batch in dataset:
+        beam_search(prepare_batch_for_lm(batch), model,
+                    beam_size=beam_size, max_iterations=30)
+        if isinstance(order, tf.keras.Model):
+            order(prepare_batch_for_pt(batch))
+        break
     model.load_weights(model_ckpt)
     if isinstance(order, tf.keras.Model):
-        order.load_weights(model_ckpt + '.order')
+        order.load_weights(model_ckpt.replace(".", ".pt."))
 
     ref_caps = {}
     hyp_caps = {}

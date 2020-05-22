@@ -274,6 +274,20 @@ def train_faster_rcnn_dataset(train_folder,
             # do this by wrapping the loss function
             strategy.run(decode_function, args=(b,))
 
+        # restore an existing model if one exists and create a directory
+        # if the ckpt directory does not exist
+        for batch in train_dataset:
+            beam_search(prepare_batch_for_lm(batch), model,
+                        beam_size=beam_size, max_iterations=30)
+            if isinstance(order, tf.keras.Model):
+                order(prepare_batch_for_pt(batch))
+            break
+        tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
+        if tf.io.gfile.exists(model_ckpt):
+            model.load_weights(model_ckpt)
+        if tf.io.gfile.exists(model_ckpt.replace(".", ".pt.")):
+            order.load_weights(model_ckpt.replace(".", ".pt."))
+
         # set up variables for early stopping; only save checkpoints when
         # best validation loss has improved
         best_loss = validate()
@@ -281,16 +295,8 @@ def train_faster_rcnn_dataset(train_folder,
         if isinstance(order, tf.keras.Model):
             var_list = var_list + order.trainable_variables
 
-        # restore an existing model if one exists and create a directory
-        # if the ckpt directory does not exist
-        tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
-        if tf.io.gfile.exists(model_ckpt):
-            model.load_weights(model_ckpt)
-        if tf.io.gfile.exists('pt_' + model_ckpt):
-            order.load_weights('pt_' + model_ckpt)
-
         # create an optimizer
-        init_lr = 0.00005
+        init_lr = 0.0005
         optim = tf.keras.optimizers.Adam(learning_rate=init_lr)
 
         def step_function(b):
@@ -340,4 +346,4 @@ def train_faster_rcnn_dataset(train_folder,
                 best_loss = validation_loss
                 model.save_weights(model_ckpt)
                 if isinstance(order, tf.keras.Model):
-                    order.save_weights('pt_' + model_ckpt)
+                    order.save_weights(model_ckpt.replace(".", ".pt."))

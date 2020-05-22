@@ -11,9 +11,6 @@ class PermutationLayer(Layer):
 
     def __init__(self,
                  input_size,
-                 hidden_size,
-                 queries_dropout=0.,
-                 keys_dropout=0.,
                  temperature=1.,
                  **kwargs):
         """Creates a Transformer permutation layer by applying a multi
@@ -22,33 +19,22 @@ class PermutationLayer(Layer):
 
         Arguments:
 
-        hidden_size: int
-            the number of units in the hidden variables used
-            in each multi head attention layer
-        queries_dropout: float
-            the ratio of units to drop during training to the
-            number of units in each attention layer
-        keys_dropout: float
-            the ratio of units to drop during training to the
-            number of units in each attention layer
+        input_size: int
+            the number of units in the input variables used
+            in the sequence to matrix layer
         temperature: float
             a positive number to divide the permutation logits by prior
-            to applying sinkhorn normaliozation"""
+            to applying normaliozation"""
         super(PermutationLayer, self).__init__()
 
         # the core attention and processing variables
         self.stick_breaking = StickBreaking()
         self.sequence_to_mat = SequenceToMat(
-            queries_dropout=queries_dropout, keys_dropout=keys_dropout)
-        self.block0 = Block(hidden_size, input_size * 2,
-                            activation='linear', **kwargs)
+            input_size=input_size)
 
         # these parameters need to be stored so that
         # tf.layers.model.save_model works
         self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.queries_dropout = queries_dropout
-        self.keys_dropout = keys_dropout
         self.temperature = temperature
         self.kwargs = kwargs
 
@@ -69,54 +55,34 @@ class PermutationLayer(Layer):
             sinkhorn normalization; a doubly stochastic matrix
             with shape [batch, seq_length, seq_length]"""
 
-        # calculate the shape of the values tensor before performing attention
-        # used when separating the heads from channels
-        shape = tf.shape(inputs.queries)
-        hidden_dim = self.input_size // 2
-
-        # pass the input through a feed forward processing block and
-        # separate heads from channels
-        activations = self.block0(inputs.queries, **kwargs)
-        activations = tf.transpose(tf.reshape(activations, [
-            shape[0], shape[1], 2, hidden_dim * 2]), [0, 2, 1, 3])
-
-        # convert the inputs into the standard data class format expected
-        # by the attention class
-        queries_mask = tf.expand_dims(inputs.queries_mask, 1)
+        # process the transformer hidden states using a sequence to matrix
+        # layer that performs an H W_x H^T op
         attention_input = AttentionInput(
-            queries=activations[..., :hidden_dim],
-            keys=activations[..., hidden_dim:],
-            queries_mask=queries_mask,
-            values_mask=queries_mask)
-
-        # pass the input through an attention processing block and
-        # take the sum over the parallel attention heads
-        activations = self.sequence_to_mat(attention_input, **kwargs)
+            queries=inputs.queries, keys=inputs.queries,
+            queries_mask=inputs.queries_mask, values_mask=inputs.queries_mask)
+        log_s, v = self.sequence_to_mat(attention_input, **kwargs)
 
         # apply a mask to the scores matrix so that only real
         # non terminal elements are permuted out of place
-        mask = tf.expand_dims(inputs.queries_mask, -2)
-        mask = tf.logical_and(mask, tf.expand_dims(inputs.queries_mask, -1))
+        mask = tf.logical_and(tf.expand_dims(inputs.queries_mask, -2),
+                              tf.expand_dims(inputs.queries_mask, -1))
 
         # pad tokens should not be permuted and logits on the diagonal
         # for pad tokens should not be masked out; this is necessary because
         # a valid permutation matrix has rows and columns that sum to one,
         # even for rows that correspond to pad tokens
-        shape = tf.shape(mask)
-        eye = tf.eye(shape[-2], num_columns=shape[
-            -1], batch_shape=shape[:-2], dtype=tf.bool)
+        eye = tf.eye(tf.shape(mask)[-2], num_columns=tf.shape(mask)[-1],
+                     batch_shape=tf.shape(mask)[:-2], dtype=tf.bool)
         eye_mask = tf.cast(tf.logical_or(mask, eye), tf.float32)
 
         # pass the outputs of the attention through a normalization layer
         # that performs stick breaking normalization
         mask = tf.cast(mask, tf.float32)
-        mean = (tf.reduce_sum(activations[:, 0] * mask, axis=[
-            1, 2], keepdims=True) /
+        mean = (tf.reduce_sum(v * mask, axis=[1, 2], keepdims=True) /
                 tf.reduce_sum(mask, axis=[1, 2], keepdims=True))
 
         noise = tfp.distributions.MultivariateNormalDiag(
-            loc=activations[:, 0] - mean,
-            scale_diag=mask * tf.exp(activations[:, 1] - 2.))
+            loc=v - mean, scale_diag=mask * tf.exp(log_s - 2.))
         return self.stick_breaking([
             noise.sample() / self.temperature, eye_mask], **kwargs)
 
@@ -132,9 +98,6 @@ class PermutationLayer(Layer):
 
         # these are all that is needed to rebuild this class
         config = dict(input_size=self.input_size,
-                      hidden_size=self.hidden_size,
-                      queries_dropout=self.queries_dropout,
-                      keys_dropout=self.keys_dropout,
                       temperature=self.temperature,
                       ** self.kwargs)
 

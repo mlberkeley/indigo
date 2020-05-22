@@ -3,33 +3,30 @@ import tensorflow as tf
 
 class SequenceToMat(tf.keras.layers.Layer):
 
-    def __init__(self,
-                 queries_dropout=0.,
-                 keys_dropout=0.):
+    def __init__(self, input_size):
         """Creates the backbone for the logits of a permutation layer
-        converts a sequence to a matrix of permutation logits
-
-        Arguments:
-
-        queries_dropout: float
-            the ratio of units to drop during training to the
-            number of units in each attention layer
-        keys_dropout: float
-            the ratio of units to drop during training to the
-            number of units in each attention layer"""
+        converts a sequence to a matrix of permutation logits"""
         super(SequenceToMat, self).__init__()
 
-        self.q_dropout = tf.keras.layers.Dropout(queries_dropout)
-        self.k_dropout = tf.keras.layers.Dropout(keys_dropout)
         self.norm0 = tf.keras.layers.LayerNormalization()
         self.norm1 = tf.keras.layers.LayerNormalization()
+        self.weight_s = self.add_weight(
+            name='weight_s', trainable=True,
+            shape=(1, input_size, input_size),
+            initializer=tf.keras.initializers.GlorotUniform())
+        self.weight_v = self.add_weight(
+            name='weight_v', trainable=True,
+            shape=(1, input_size, input_size),
+            initializer=tf.keras.initializers.GlorotUniform())
 
         # these parameters need to be stored so that
         # tf.layers.model.save_model works
-        self.queries_dropout_rate = queries_dropout
-        self.keys_dropout_rate = keys_dropout
+        self.input_size = input_size
 
-    def call(self, inputs, **kwargs):
+    @tf.function(experimental_relax_shapes=True)
+    def static_call(self, queries, keys,
+                    queries_mask, values_mask,
+                    **kwargs):
         """Runs a forward pass on a multi head attention layer
         inputs is an instance of AttentionInput
 
@@ -47,41 +44,55 @@ class SequenceToMat(tf.keras.layers.Layer):
 
         # apply dropout to the queries keys and values tensor
         # requires all to be like [batch, heads, ]
-        queries = self.q_dropout(
-            self.norm0(inputs.queries, **kwargs), **kwargs)
-        keys = self.k_dropout(
-            self.norm1(inputs.keys, **kwargs), **kwargs)
+        queries = self.norm0(queries, **kwargs)
+        keys = self.norm1(keys, **kwargs)
 
         # compute the multi head soft attention weights using
         # scaled dot product attention
-        size = tf.math.sqrt(
-            tf.cast(tf.shape(queries)[-1], tf.float32))
-        scores = tf.matmul(
-            queries, keys, transpose_b=True) / size
-
-        # if an attention bias is provided that add the attention bias
-        # to the pre softmax scores matrix
-        if hasattr(inputs, 'bias') and inputs.bias is not None:
-            scores = scores + inputs.bias
+        size = tf.cast(tf.shape(queries)[-1], tf.float32)
+        log_s = tf.matmul(queries, tf.matmul(
+            self.weight_s, keys, transpose_b=True)) / size
+        v = tf.matmul(queries, tf.matmul(
+            self.weight_v, keys, transpose_b=True)) / size
 
         # apply a mask to the scores matrix so that only real
         # non terminal elements are permuted out of place
-        mask = tf.expand_dims(inputs.values_mask, -2)
-        mask = tf.logical_and(mask, tf.expand_dims(inputs.queries_mask, -1))
+        mask = tf.expand_dims(values_mask, -2)
+        mask = tf.logical_and(mask, tf.expand_dims(queries_mask, -1))
 
         # pad tokens should not be permuted and logits on the diagonal
         # for pad tokens should not be masked out; this is necessary because
         # a valid permutation matrix has rows and columns that sum to one,
         # even for rows that correspond to pad tokens
-        shape = tf.shape(mask)
-        eye = tf.eye(shape[-2], num_columns=shape[
-            -1], batch_shape=shape[:-2], dtype=tf.bool)
+        eye = tf.eye(tf.shape(mask)[-2], num_columns=tf.shape(mask)[-1],
+                     batch_shape=tf.shape(mask)[:-2], dtype=tf.bool)
         diagonal_mask = tf.logical_and(tf.logical_not(mask), eye)
 
-        # apply a boolean mask to the keys and values
-        scores = tf.where(mask, scores, tf.fill(tf.shape(scores), -999999.))
-        return tf.where(
-            diagonal_mask, tf.fill(tf.shape(scores), 0.), scores)
+        # apply a boolean mack to the log scale and mean
+        log_s = tf.where(mask, log_s, tf.fill(tf.shape(log_s), -999999.))
+        v = tf.where(mask, v, tf.fill(tf.shape(v), -999999.))
+        return log_s, tf.where(
+            diagonal_mask, tf.fill(tf.shape(v), 999999.), v)
+
+    def call(self, inputs, **kwargs):
+        """Runs a forward pass on a multi head attention layer
+        inputs is an instance of AttentionInput
+
+        Arguments:
+
+        inputs: AttentionInput
+            a dataclass instance that contains queries, keys
+            and values along with masks
+
+        Returns:
+
+        outputs: tf.Tensor
+            the result of applying a multi head attention mechanism
+            will be shaped [batch_dim, seq_dim, channels]"""
+
+        return self.static_call(inputs.queries, inputs.keys,
+                                inputs.queries_mask, inputs.values_mask,
+                                **kwargs)
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild
@@ -94,8 +105,7 @@ class SequenceToMat(tf.keras.layers.Layer):
             layers base class and all class parameters"""
 
         # these are all that is needed to rebuild this class
-        config = dict(queries_dropout=self.queries_dropout_rate,
-                      keys_dropout=self.keys_dropout_rate)
+        config = dict(input_size=self.input_size)
 
         base_config = super(SequenceToMat, self).get_config()
         return dict(list(base_config.items()) +

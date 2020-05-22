@@ -146,8 +146,8 @@ def pretrain_faster_rcnn_dataset(train_folder,
     # restore an existing model if one exists and create a directory
     # if the ckpt directory does not exist
     tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
-    if tf.io.gfile.exists(model_ckpt + '.order.index'):
-        model.load_weights(model_ckpt + '.order')
+    if tf.io.gfile.exists(model_ckpt.replace(".", ".pt.")):
+        model.load_weights(model_ckpt.replace(".", ".pt."))
 
     # set up variables for early stopping; only save checkpoints when
     # best validation loss has improved

@@ -67,7 +67,10 @@ class Attention(tf.keras.layers.Layer):
         self.values_dropout_rate = values_dropout
         self.causal = causal
 
-    def call(self, inputs, **kwargs):
+    @tf.function(experimental_relax_shapes=True)
+    def static_call(self, queries, keys, values,
+                    queries_mask, values_mask,
+                    bias, **kwargs):
         """Runs a forward pass on a multi head attention layer
         inputs is an instance of AttentionInput
 
@@ -85,9 +88,9 @@ class Attention(tf.keras.layers.Layer):
 
         # apply dropout to the queries keys and values tensor
         # requires all to be like [batch, heads, ]
-        queries = self.q_dropout(inputs.queries, **kwargs)
-        keys = self.k_dropout(inputs.keys, **kwargs)
-        values = self.v_dropout(inputs.values, **kwargs)
+        queries = self.q_dropout(queries, **kwargs)
+        keys = self.k_dropout(keys, **kwargs)
+        values = self.v_dropout(values, **kwargs)
 
         # compute the multi head soft attention weights using
         # scaled dot product attention
@@ -98,11 +101,10 @@ class Attention(tf.keras.layers.Layer):
 
         # if an attention bias is provided that add the attention bias
         # to the pre softmax scores matrix
-        if hasattr(inputs, 'bias') and inputs.bias is not None:
-            scores = scores + inputs.bias
+        scores = scores + bias
 
         # apply a causal mask to the soft attention weights
-        mask = tf.expand_dims(inputs.values_mask, -2)
+        mask = tf.expand_dims(values_mask, -2)
         if self.causal:
             mask = tf.logical_and(mask, causal_mask(scores))
 
@@ -112,8 +114,30 @@ class Attention(tf.keras.layers.Layer):
 
         # mask the output sequence where appropriate
         outputs = tf.matmul(scores, values)
-        return tf.where(tf.expand_dims(inputs.queries_mask, -1),
+        return tf.where(tf.expand_dims(queries_mask, -1),
                         outputs, tf.zeros_like(outputs))
+
+    def call(self, inputs, **kwargs):
+        """Runs a forward pass on a multi head attention layer
+        inputs is an instance of AttentionInput
+
+        Arguments:
+
+        inputs: AttentionInput
+            a dataclass instance that contains queries, keys
+            and values along with masks
+
+        Returns:
+
+        outputs: tf.Tensor
+            the result of applying a multi head attention mechanism
+            will be shaped [batch_dim, seq_dim, channels]"""
+
+        bias = inputs.bias if hasattr(
+            inputs, 'bias') and inputs.bias is not None else tf.zeros([])
+        return self.static_call(inputs.queries, inputs.keys, inputs.values,
+                                inputs.queries_mask, inputs.values_mask,
+                                bias, **kwargs)
 
     def get_config(self):
         """Creates a state dictionary that can be used to rebuild

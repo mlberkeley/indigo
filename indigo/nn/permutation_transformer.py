@@ -89,10 +89,7 @@ class PermutationTransformer(Sequential):
         # the final layer in the transformer depends on the model purpose
         # to run Transformer-InDIGO select 'indigo'
         layers.extend([PermutationLayer(
-            hidden_size, hidden_size * 4,
-            queries_dropout=queries_dropout,
-            keys_dropout=keys_dropout,
-            temperature=temperature, **kwargs)])
+            hidden_size, temperature=temperature, **kwargs)])
 
         super(PermutationTransformer, self).__init__(layers)
 

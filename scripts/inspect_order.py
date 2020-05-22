@@ -20,7 +20,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--vocab_file', type=str, default='train2017_vocab.txt')
     parser.add_argument(
-        '--model_ckpt', type=str, default='ckpt/nsds')
+        '--model_ckpt', type=str, default='ckpt/nsds.h5')
     parser.add_argument(
         '--embedding_size', type=int, default=256)
     parser.add_argument(
