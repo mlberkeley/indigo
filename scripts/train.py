@@ -51,7 +51,8 @@ if __name__ == "__main__":
                            unknown_word="<unk>",
                            unknown_id=1)
 
-    strategy = tf.distribute.MirroredStrategy()
+    strategy = tf.distribute.MirroredStrategy(
+        cross_device_ops=tf.distribute.HierarchicalCopyAllReduce())
     with strategy.scope():
 
         model = Transformer(vocab.size(),
