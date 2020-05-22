@@ -287,8 +287,8 @@ def train_faster_rcnn_dataset(train_folder,
         tf.io.gfile.makedirs(os.path.dirname(model_ckpt))
         if tf.io.gfile.exists(model_ckpt):
             model.load_weights(model_ckpt)
-        if tf.io.gfile.exists(model_ckpt + '.order'):
-            order.load_weights(model_ckpt + '.order')
+        if tf.io.gfile.exists('pt_' + model_ckpt):
+            order.load_weights('pt_' + model_ckpt)
 
         # create an optimizer
         init_lr = 0.00005
@@ -341,4 +341,4 @@ def train_faster_rcnn_dataset(train_folder,
                 best_loss = validation_loss
                 model.save_weights(model_ckpt)
                 if isinstance(order, tf.keras.Model):
-                    order.save_weights(model_ckpt + '.order')
+                    order.save_weights('pt_' + model_ckpt)
